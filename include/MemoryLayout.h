@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Definitions.h"
+#include "GraphDefinitions.h"
 #include "Utility.h"
 #include "device/MemoryIndex.cuh"
 #include "device/CudaUniquePtr.cuh"
