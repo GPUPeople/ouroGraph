@@ -1,0 +1,3 @@
+[submodule "ouroboros"]
+	path = ouroboros
+	url = git@github.com:GPUPeople/Ouroboros.git
