@@ -1,3 +1,6 @@
 [submodule "ouroboros"]
 	path = ouroboros
 	url = git@github.com:GPUPeople/Ouroboros.git
+[submodule "externals/cub"]
+	path = externals/cub
+	url = https://github.com/NVlabs/cub.git
