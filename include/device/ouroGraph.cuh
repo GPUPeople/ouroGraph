@@ -15,6 +15,13 @@ struct PerfMeasure;
 template <typename VertexDataType, typename EdgeDataType, class MemoryManagerType>
 struct ouroGraph
 {
+	struct Vertices
+	{
+		__device__ __forceinline__ VertexDataType getAt(int index) { return d_vertices[-index]; }
+		__device__ __forceinline__ VertexDataType* getAtPtr(int index) { return &d_vertices[-index]; }
+		__device__ __forceinline__ void setAt(int index, const VertexDataType& vertex) { d_vertices[-index] = vertex; }
+		VertexDataType* d_vertices{nullptr};
+	};
 	ouroGraph() : memory_manager{new MemoryManagerType()}{}
 	~ouroGraph();
 
@@ -38,7 +45,7 @@ struct ouroGraph
 	MemoryManagerType* memory_manager{nullptr};
 	MemoryManagerType* d_memory_manager{nullptr};
 	ouroGraph* d_graph{nullptr};
-	VertexDataType* d_vertices{nullptr};
+	Vertices vertices;
 	size_t vertices_size{ 0 };
 	size_t vertexqueue_size{ 0 };
 	size_t ourograph_size {0};

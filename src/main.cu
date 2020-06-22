@@ -14,6 +14,7 @@
 #include "device/Initialization.cuh"
 #include "InstanceDefinitions.cuh"
 #include "MemoryLayout.h"
+#include "Verification.h"
 
 // Json Reader
 #include "helper/json.h"
@@ -41,6 +42,7 @@ int main(int argc, char* argv[])
 	cudaSetDevice(device);
 	cudaDeviceProp prop;
 	cudaGetDeviceProperties(&prop, device);
+	std::cout << "Going to use " << prop.name << " " << prop.major << "." << prop.minor << "\n";
 
 	auto graphs = *config.find("graphs");
 	for(auto const& elem : graphs)
@@ -96,8 +98,15 @@ int main(int argc, char* argv[])
 			printf("Smallest Adjacency: %u | Largest Adjacency: %u | Average Adjacency: %u\n", min_adjacency_length, max_adjacency_length, csr_graph.row_offsets[csr_graph.rows] / csr_graph.rows);
 		}
 
+		// Graph Testcase
 		ouroGraph<VertexData, EdgeData, OuroPQ> graph;
 		graph.initialize(csr_graph);
+		CSR<DataType> csr_output;
+		graph.ouroGraphToCSR(csr_output);
+
+		// Verification
+		Verification<DataType> verification(csr_graph);
+		verification.verify(csr_output, "Initialization", OutputCodes::VERIFY_INITIALIZATION);
 	}
 
 	return 0;

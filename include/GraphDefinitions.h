@@ -13,6 +13,17 @@ using OffsetList_t = std::vector<vertex_t>;
 using AdjacencyList_t = std::vector<vertex_t>;
 using MatrixList_t = std::vector<matrix_t>;
 
+#define SINGLE_THREAD (threadIdx.x == 0)
+#define SINGLE_THREAD_MULTI (threadID == 0)
+
+enum class OutputCodes : int
+{
+	OKAY = 0,
+	VERIFY_INITIALIZATION = 1,
+	VERIFY_INSERTION = 2,
+	VERIFY_DELETION = 3
+};
+
 static constexpr char PBSTR[] = "##############################################################################################################";
 static constexpr int PBWIDTH = 99;
 

@@ -1,0 +1,13 @@
+{
+    "device" : 0,
+    "iterations" : 25,
+    "update_iterations" : 0,
+    "batch_size" : 100000,
+    "verify" : true,
+    "realistic_deletion" : false,
+    "write_csv" : true,
+    "graphs":
+    [
+        {"filename" : "../graphs/luxembourg_osm.mtx"}
+    ]
+}

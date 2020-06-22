@@ -18,11 +18,11 @@ __global__ void d_release(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerT
 	if (tid >= graph->number_vertices)
 		return;
 
-	auto vertices = graph->d_vertices;
-	if(vertices[tid].index.index == std::numeric_limits<decltype(vertices[tid].index.index)>::max())
+	auto vertex = graph->vertices.getAt(tid);
+	if(vertex.index.index == std::numeric_limits<decltype(vertex.index.index)>::max())
 	{
-		// Adjacency still allocated, free it
-		graph->freeAdjacency(vertices[tid].adjacency);
+		// Adjacency still allocated from CUDA Allocator, free it now
+		free(vertex.adjacency);
 	}
 }
 
@@ -55,12 +55,17 @@ void updateGraphDevice(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
 ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::~ouroGraph()
 {
+	if(printDebug)
+		std::cout << "Destructor called for OuroGraph!" << std::endl;
 	auto block_size = 256;
 	int grid_size = (number_vertices / block_size) + 1;
 
 	if (memory_manager->memory.d_memory != nullptr)
 	{
-		d_release<VertexDataType, EdgeDataType, MemoryManagerType> <<<grid_size, block_size>>> (reinterpret_cast<ouroGraph*>(d_graph));
+		if(printDebug)
+			std::cout << "Freeing pages" << std::endl;
+		d_release<VertexDataType, EdgeDataType, MemoryManagerType> <<<grid_size, block_size>>> (d_graph);
+		HANDLE_ERROR(cudaDeviceSynchronize());
 	}
 
 	delete memory_manager;

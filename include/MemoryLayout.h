@@ -174,6 +174,7 @@ typedef struct VertexData
 	VertexMetaData meta_data;
 	MemoryIndex index;
 	EdgeData* adjacency;
+	static constexpr decltype(index.index) MAX_VALUE{MemoryIndex::MAX_VALUE};
 }VertexData;
 
 typedef struct VertexDataWeight
@@ -181,6 +182,7 @@ typedef struct VertexDataWeight
 	VertexMetaDataWeight meta_data;
 	MemoryIndex index;
 	EdgeDataWeight* adjacency;
+	static constexpr decltype(index.index) MAX_VALUE{MemoryIndex::MAX_VALUE};
 }VertexDataWeight;
 
 //------------------------------------------------------------------------------
