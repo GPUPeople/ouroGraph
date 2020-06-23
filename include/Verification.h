@@ -111,13 +111,13 @@ struct Verification
 			printProgressBarEnd();
 	}
 
-	bool verify(const CSR<DataType>& dynGraph, const char* header, OutputCodes output_code)
+	bool verify(const CSR<DataType>& ouroGraph, const char* header, OutputCodes output_code)
 	{
 		auto correct{ true };
-		if (nnz_ != dynGraph.nnz)
+		if (nnz_ != ouroGraph.nnz)
 		{
 			printf("%sError - %s\n%s", break_line_red_s, header, break_line_red_e);
-			printf("NNZ missing: Ref: %u | Dyn: %u\n", nnz_, dynGraph.nnz);
+			printf("NNZ missing: Ref: %u | Dyn: %u\n", nnz_, ouroGraph.nnz);
 			printf("%s", break_line_red);
 			correct = false;
 		}
@@ -127,10 +127,10 @@ struct Verification
 			{
 				auto offset = offset_[i];
 				auto neighbours = offset_[i + 1] - offset;
-				if (offset != dynGraph.row_offsets[i])
+				if (offset != ouroGraph.row_offsets[i])
 				{
 					printf("%sError - %s\n%s", break_line_red_s, header, break_line_red_e);
-					printf("Row %d : ref:[%u] dyn:[%u] | Neighbours wrong!\n", i, offset_[i], dynGraph.row_offsets[i]);
+					printf("Row %d : ref:[%u] dyn:[%u] | Neighbours wrong!\n", i, offset_[i], ouroGraph.row_offsets[i]);
 					printf("%s", break_line_red);
 					correct = false;
 					break;
@@ -141,9 +141,9 @@ struct Verification
 					for (int j = 0; offset < offset_[i + 1]; ++offset, ++j)
 						{
 						bool edge_found{ false };
-						for (auto k = dynGraph.row_offsets[i]; k < dynGraph.row_offsets[i + 1]; ++k)
+						for (auto k = ouroGraph.row_offsets[i]; k < ouroGraph.row_offsets[i + 1]; ++k)
 						{
-							if (adjacency[j] == dynGraph.col_ids[k])
+							if (adjacency[j] == ouroGraph.col_ids[k])
 								edge_found = true;
 						}
 						if (!edge_found)
@@ -151,16 +151,16 @@ struct Verification
 							printf("%sError - %s\n%s", break_line_red_s, header, break_line_red_e);
 							printf("Row %d : Offset: %u | ref:[%u] Edge NOT found!\n", i, offset, adjacency[j]);
 							printf("------------------------------------------------\n");
-							printf("Neighbours: %u vs. %u\n", neighbours, dynGraph.row_offsets[i + 1] - dynGraph.row_offsets[i]);
+							printf("Neighbours: %u vs. %u\n", neighbours, ouroGraph.row_offsets[i + 1] - ouroGraph.row_offsets[i]);
 							printf("Reference\n");
 							for (auto k = 0; k < neighbours; ++k)
 							{
 								printf("%u | ", adjacency[k]);
 							}
 							printf("\nDynGraph:\n");
-							for (auto k = dynGraph.row_offsets[i]; k < dynGraph.row_offsets[i + 1]; ++k)
+							for (auto k = ouroGraph.row_offsets[i]; k < ouroGraph.row_offsets[i + 1]; ++k)
 							{
-								printf("%u | ", dynGraph.col_ids[k]);
+								printf("%u | ", ouroGraph.col_ids[k]);
 							}
 							printf("\n");
 							printf("%s", break_line_red);

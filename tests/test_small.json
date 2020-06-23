@@ -8,6 +8,7 @@
     "write_csv" : true,
     "graphs":
     [
-        {"filename" : "../graphs/luxembourg_osm.mtx"}
+		{"filename" : "../graphs/email"},
+		{"filename" : "../graphs/luxembourg_osm"}
     ]
 }

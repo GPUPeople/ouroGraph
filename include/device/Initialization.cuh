@@ -26,7 +26,7 @@ __global__ void d_requirements_shared(size_t num_vertices,
 		return;
 
 	const auto adjacency_size = offset[tid + 1] - offset[tid];
-	const auto queue_index = QI::getQueueIndex(adjacency_size);
+	const auto queue_index = QI::getQueueIndex(adjacency_size * sizeof(EdgeDataType));
 
 	// Clear counters
 	if(threadIdx.x < NUM_QUEUES)
@@ -58,7 +58,7 @@ __global__ void d_requirements_shared(size_t num_vertices,
 	{
 		page_offset = queue_counters[queue_index] + local_offset;
 		init_helper[(2 * NUM_QUEUES) + tid] = page_offset;
-		auto pages_per_chunk = QI::getPagesPerChunkFromQueueIndex(queue_index);
+		unsigned int pages_per_chunk = QI::getPagesPerChunkFromQueueIndex(queue_index);
 		if (page_offset % pages_per_chunk == 0)
 		{
 			// We are the first in a chunk, count this chunk once
@@ -69,7 +69,7 @@ __global__ void d_requirements_shared(size_t num_vertices,
 
 //##############################################################################################################################################
 //
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
+template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType, int NUM_QUEUES>
 __global__ void d_chunk_initialize_w(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
                                     const unsigned int* __restrict offset,
                                     const unsigned int* __restrict adjacency,
@@ -100,11 +100,10 @@ __global__ void d_chunk_initialize_w(ouroGraph<VertexDataType, EdgeDataType, Mem
 		if(index != std::numeric_limits<decltype(index)>::max())
 		{
 			// Get corresponding info, which queue, how many pages per chunk, and which chunk and page overall!
-			auto queue_index = QI::getQueueIndex(vertex.meta_data.neighbours);
+			auto queue_index = QI::getQueueIndex(vertex.meta_data.neighbours * sizeof(EdgeDataType));
 			auto pages_per_chunk = QI::getPagesPerChunkFromQueueIndex(queue_index);
-			uint32_t chunk_index = helper[NUM_QUEUES + queue_index] + (index / pages_per_chunk) + MemoryManagerType::totalNumberQueues(); // Add chunks already allocated
+			uint32_t chunk_index = helper[NUM_QUEUES + queue_index] + (index / pages_per_chunk) + MemoryManagerType::totalNumberVirtualQueues(); // Add chunks already allocated
 			uint32_t page_index = index % pages_per_chunk;
-			vertex.index.setIndex(chunk_index, page_index);
 
 			if(page_index == 0)
 			{
@@ -128,15 +127,13 @@ __global__ void d_chunk_initialize_w(ouroGraph<VertexDataType, EdgeDataType, Mem
 					graph->d_memory_manager->enqueueInitialChunk(queue_index, chunk_index, remaining_pages, pages_per_chunk);
 				}
 			}
-
 			// Just get pointer
 			vertex.adjacency = reinterpret_cast<EdgeDataType*>(CA::getPage(graph->d_memory_manager->memory.d_data, chunk_index, page_index, QI::getPageSizeFromQueueIndex(queue_index)));
 		}
 		else
 		{
 			// Too large for chunk allocation
-			vertex.index.index = VertexDataType::MAX_VALUE;
-			vertex.adjacency = reinterpret_cast<EdgeDataType*>(malloc(AllocationHelper::getNextPow2(vertex.meta_data.neighbours) * sizeof(EdgeDataType)));
+			vertex.adjacency = reinterpret_cast<EdgeDataType*>(malloc(AllocationHelper::getNextPow2(vertex.meta_data.neighbours* sizeof(EdgeDataType))));
 			
 			if (statistics_enabled)
 				atomicAdd(&graph->d_memory_manager->stats.cudaMallocCount, 1);
@@ -144,7 +141,6 @@ __global__ void d_chunk_initialize_w(ouroGraph<VertexDataType, EdgeDataType, Mem
 		vertices[warpID] = vertex;
 		graph->vertices.setAt(wid, vertex);
 	}
-
 	__syncthreads();
 
 	// --------------------------------------------------------
@@ -227,7 +223,7 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::initialize(CSR<
 	// Calculate page requirements per adjacency, overall chunk requirements
 	block_size = 256;
 	grid_size = Ouro::divup(d_csr_graph.rows , block_size);
-	d_requirements_shared<EdgeDataType, MemoryManagerType, NUM_QUEUES> << <grid_size, block_size >> > (d_csr_graph.rows, d_csr_graph.row_offsets, d_init_helper.get());
+	d_requirements_shared<EdgeDataType, MemoryManagerType, MemoryManagerType::totalNumberQueues()> << <grid_size, block_size >> > (d_csr_graph.rows, d_csr_graph.row_offsets, d_init_helper.get());
 	HANDLE_ERROR(cudaDeviceSynchronize());
 
 
@@ -245,7 +241,7 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::initialize(CSR<
 		chunk_requirements[i] = Ouro::divup(page_requirements[i], pages_per_chunk);
 		memory_manager->memory.next_free_chunk += chunk_requirements[i];
 
-		printf("Queue: %d: Page Requirements: %u | Chunk Requirements: %u\n", i, page_requirements[i], chunk_requirements[i]);
+		printf("Queue: %d: Page Size: %u |  Page Requirements: %u | Chunk Requirements: %u\n", i, MemoryManagerType::ConcreteOuroboros::SmallestPageSize_ << i, page_requirements[i], chunk_requirements[i]);
 
 		// Check if we overflow with this setup, can early exit
 		unsigned int graph_data_chunk_equivalent = Ouro::divup((d_csr_graph.nnz * sizeof(unsigned int)) + ((d_csr_graph.rows + 1) * sizeof(unsigned int)), MemoryManagerType::ChunkType::size());
@@ -269,15 +265,13 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::initialize(CSR<
 	// Initialize
 	block_size = WARP_SIZE * WARPS_PER_BLOCK_INIT;
 	grid_size = Ouro::divup(input_graph.rows , WARPS_PER_BLOCK_INIT);
-	d_chunk_initialize_w<VertexDataType, EdgeDataType, MemoryManagerType> << <grid_size, block_size >> > (d_graph,
+	d_chunk_initialize_w<VertexDataType, EdgeDataType, MemoryManagerType, MemoryManagerType::totalNumberQueues()> << <grid_size, block_size >> > (d_graph,
 		d_csr_graph.row_offsets,
 		d_csr_graph.col_ids,
 		d_init_helper.get());
+	HANDLE_ERROR(cudaDeviceSynchronize());
 
 	updateGraphHost(*this);
-
-	// Print current chunk allocation 
-	memory_manager->printFreeResources();
 
 	if(printDebug)
 		printf("Init Done!\n");

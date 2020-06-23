@@ -63,6 +63,7 @@ int main(int argc, char* argv[])
 			std::cout << "could not load csr file:\n\t" << ex.what() << "\n";
 			try
 			{
+				filename += std::string(".mtx");
 				std::cout << "trying to load mtx file \"" << filename << "\"\n";
 				auto coo_mat = loadMTX<DataType>(filename.c_str());
 				convert(csr_graph, coo_mat);
@@ -84,7 +85,7 @@ int main(int argc, char* argv[])
 			}
 		}
 
-		printf("Using: %s with %llu vertices and %llu edges\n", argv[1], csr_graph.rows, csr_graph.nnz);
+		std::cout << "Using: " << argv[1] << " with " << csr_graph.rows << " vertices and " << csr_graph.nnz << " edges\n";
 		if(printDebug)
 		{
 			auto max_adjacency_length = 0U;
@@ -95,7 +96,19 @@ int main(int argc, char* argv[])
 				max_adjacency_length = std::max(max_adjacency_length, neighbours);
 				min_adjacency_length = std::min(min_adjacency_length, neighbours);
 			}
-			printf("Smallest Adjacency: %u | Largest Adjacency: %u | Average Adjacency: %u\n", min_adjacency_length, max_adjacency_length, csr_graph.row_offsets[csr_graph.rows] / csr_graph.rows);
+			std::cout << "Smallest Adjacency: " << min_adjacency_length << " | Largest Adjacency: " << max_adjacency_length << " | Average Adjacency: "
+			<< csr_graph.row_offsets[csr_graph.rows] / csr_graph.rows << "\n";
+		}
+
+		// FLush Graph beforehand
+		for(auto i = 0; i < csr_graph.rows; ++i)
+		{
+			auto offset = csr_graph.row_offsets[i];
+			auto neighbours = csr_graph.row_offsets[i + 1] - offset;
+			for(auto j = 0; j < neighbours; ++j)
+			{
+				csr_graph.col_ids[offset + j] = i;
+			}
 		}
 
 		// Graph Testcase

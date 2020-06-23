@@ -19,7 +19,7 @@ __global__ void d_release(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerT
 		return;
 
 	auto vertex = graph->vertices.getAt(tid);
-	if(vertex.index.index == std::numeric_limits<decltype(vertex.index.index)>::max())
+	if (not graph->d_memory_manager->validOuroborosPointer(vertex.adjacency))
 	{
 		// Adjacency still allocated from CUDA Allocator, free it now
 		free(vertex.adjacency);
