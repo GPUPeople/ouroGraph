@@ -17,9 +17,11 @@ struct ouroGraph
 {
 	struct Vertices
 	{
-		__device__ __forceinline__ VertexDataType getAt(int index) { return d_vertices[-index]; }
-		__device__ __forceinline__ VertexDataType* getAtPtr(int index) { return &d_vertices[-index]; }
-		__device__ __forceinline__ void setAt(int index, const VertexDataType& vertex) { d_vertices[-index] = vertex; }
+		__device__ __forceinline__ VertexDataType getAt(const int index) { return d_vertices[-index]; }
+		__device__ __forceinline__ VertexDataType* getPtrAt(const int index) { return &d_vertices[-index]; }
+		__device__ __forceinline__ void setAt(const int index, const VertexDataType& vertex) { d_vertices[-index] = vertex; }
+		__device__ __forceinline__ void setAdjacencyAt(const int index, EdgeDataType* adjacency) { d_vertices[-index].adjacency = adjacency; }
+		__device__ __forceinline__ void setNeighboursAt(const int index, const unsigned int neighbours) { d_vertices[-index].meta_data.neighbours = neighbours; }
 		VertexDataType* d_vertices{nullptr};
 	};
 	ouroGraph() : memory_manager{new MemoryManagerType()}{}
@@ -27,9 +29,7 @@ struct ouroGraph
 
 	// Initialization
 	template <typename DataType>
-	void initialize(CSR<DataType>& input_graph);
-	template <typename DataType>
-	void initCUDAManaged(CSR<DataType>& input_graph);
+	void initialize(const CSR<DataType>& input_graph);
 	template <typename DataType>
 	void ouroGraphToCSR(CSR<DataType>& output_graph);
 
@@ -38,8 +38,8 @@ struct ouroGraph
 	void edgeDeletion(EdgeUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>& update_batch);
 
 	// Adjacency Modifications
-	__device__ __forceinline__ void* allocAdjacency(size_t size) { return d_memory_manager->malloc(size); }
-	__device__ __forceinline__ void freeAdjacency(void* ptr) { d_memory_manager->free(ptr); }
+	__device__ __forceinline__ EdgeDataType* allocAdjacency(unsigned int size) { return reinterpret_cast<EdgeDataType*>(d_memory_manager->malloc(size * sizeof(EdgeDataType))); }
+	__device__ __forceinline__ void freeAdjacency(EdgeDataType* ptr) { d_memory_manager->free(ptr); }
 
 	// Data
 	MemoryManagerType* memory_manager{nullptr};

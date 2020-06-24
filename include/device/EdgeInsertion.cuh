@@ -12,7 +12,7 @@ __global__ void d_edgeInsertionVertexCentric(ouroGraph<VertexDataType, EdgeDataT
                                              const int batch_size,
                                              const index_t* __restrict update_src_offsets)
 {
-	using QI = typename MemoryManagerType::template QI<EdgeDataType>;
+	using QI = typename MemoryManagerType::QI;
 
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 	if (tid >= graph->number_vertices)
@@ -26,14 +26,13 @@ __global__ void d_edgeInsertionVertexCentric(ouroGraph<VertexDataType, EdgeDataT
 	const auto range_updates = update_src_offsets[(graph->number_vertices + 1) + tid + 1] - index_offset;
 
 	// Do insertion here
-	VertexDataType vertex = graph->d_vertices[tid];
-	const auto queue_index = QI::getQueueIndex(vertex.meta_data.neighbours);
-	const auto new_queue_index = QI::getQueueIndex(vertex.meta_data.neighbours + number_updates);
+	VertexDataType vertex = graph->vertices.getAt(tid);
+	const auto queue_index = QI::getQueueIndex(vertex.meta_data.neighbours * sizeof(EdgeDataType));
+	const auto new_queue_index = QI::getQueueIndex((vertex.meta_data.neighbours + number_updates) * sizeof(EdgeDataType));
 	if (queue_index != new_queue_index)
 	{
 		// Have to reallocate here
-		MemoryIndex new_index;
-		auto adjacency = graph->d_memory_manager->template allocPage<EdgeDataType>(vertex.meta_data.neighbours + number_updates, new_index);
+		auto adjacency = graph->allocAdjacency(vertex.meta_data.neighbours + number_updates);
 		if(adjacency == nullptr)
 		{
 			printf("Could not allocate Page for Vertex %u in Queue %u!\n", tid, new_queue_index);
@@ -41,7 +40,7 @@ __global__ void d_edgeInsertionVertexCentric(ouroGraph<VertexDataType, EdgeDataT
 		}
 
 		// Copy over data vectorized
-		auto iterations = divup(vertex.meta_data.neighbours * sizeof(EdgeDataType), sizeof(uint4));
+		auto iterations = Ouro::divup(vertex.meta_data.neighbours * sizeof(EdgeDataType), sizeof(uint4));
 		for (auto i = 0U; i < iterations; ++i)
 		{
 			reinterpret_cast<uint4*>(adjacency)[i] = reinterpret_cast<uint4*>(vertex.adjacency)[i];
@@ -50,25 +49,22 @@ __global__ void d_edgeInsertionVertexCentric(ouroGraph<VertexDataType, EdgeDataT
 		// Do insertion now
 		for (auto i = 0U, j = vertex.meta_data.neighbours; i < range_updates; ++i)
 		{
-			if (edge_update_data[index_offset + i].update.destination != DELETIONMARKER)
+			if (edge_update_data[index_offset + i].update.destination != DeletionMarker<index_t>::val)
 			{
 				adjacency[j++].destination = edge_update_data[index_offset + i].update.destination;
 			}
 		}
 
 		// Free old page and set new pointer and index
-		unsigned int chunk_index, page_index;
-		vertex.index.getIndex(chunk_index, page_index);
-		graph->d_memory_manager->freePage(vertex.index, vertex.adjacency);
-		graph->d_vertices[tid].adjacency = adjacency;
-		graph->d_vertices[tid].index = new_index;
+		graph->freeAdjacency(vertex.adjacency);
+		graph->vertices.setAdjacencyAt(tid, adjacency);
 	}
 	else
 	{
 		// Do insertion now
 		for (auto i = 0U, j = vertex.meta_data.neighbours; i < range_updates; ++i)
 		{
-			if (edge_update_data[index_offset + i].update.destination != DELETIONMARKER)
+			if (edge_update_data[index_offset + i].update.destination != DeletionMarker<index_t>::val)
 			{
 				vertex.adjacency[j++].destination = edge_update_data[index_offset + i].update.destination;
 			}
@@ -76,7 +72,7 @@ __global__ void d_edgeInsertionVertexCentric(ouroGraph<VertexDataType, EdgeDataT
 	}
 
 	// Update number of neighbours
-	graph->d_vertices[tid].meta_data.neighbours += number_updates;
+	graph->vertices.setNeighboursAt(tid, number_updates);
 }
 
 // ##############################################################################################################################################
@@ -92,7 +88,7 @@ __global__ void d_duplicateCheckingInSortedBatch2Graph(ouroGraph<VertexDataType,
 		return;
 
 	auto edge_update = edge_update_data[tid];
-	auto vertex = graph->d_vertices[edge_update.source];
+	auto vertex = graph->vertices.getAt(edge_update.source);
 	auto adjacency = vertex.adjacency;
 	// if(reinterpret_cast<unsigned long long>(vertex.adjacency) == 0xffffffffffffffff)
 	// {
@@ -105,18 +101,16 @@ __global__ void d_duplicateCheckingInSortedBatch2Graph(ouroGraph<VertexDataType,
 		{
 			if(printDebugCUDA)
 				printf("Batch:Graph  ->  Duplicate found : %u | %u\n", edge_update.source, edge_update.update.destination);
-			if(statistics_enabled)
-				atomicAdd(&graph->d_memory_manager->stats.duplicates_detected, 1);
 			
 			if(updateValues)
 			{
 				// Update with new values
 				adjacency[i] = edge_update.update;
-				edge_update_data[tid].update.destination = DELETIONMARKER;
+				edge_update_data[tid].update.destination = DeletionMarker<index_t>::val;
 			}
 			else
 			{
-				edge_update_data[tid].update.destination = DELETIONMARKER;
+				edge_update_data[tid].update.destination = DeletionMarker<index_t>::val;
 			}
 			
 			atomicSub(&edge_src_counter[edge_update.source], 1);
@@ -149,7 +143,7 @@ __global__ void d_duplicateCheckingInSortedBatch(ouroGraph<VertexDataType, EdgeD
 		{
 			if(edge_update.update.destination == edge_update_data[++tid].update.destination)
 			{
-				edge_update_data[tid].update.destination = DELETIONMARKER;
+				edge_update_data[tid].update.destination = DeletionMarker<index_t>::val;
 				--edge_src_counter[edge_update.source];
 
 				if(printDebugCUDA)
@@ -165,27 +159,6 @@ __global__ void d_duplicateCheckingInSortedBatch(ouroGraph<VertexDataType, EdgeD
 			
 		}
 	}
-}
-
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-__global__ void d_simpleChunkTests(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph)
-{
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-	if(tid != 0)
-		return;
-
-	if(tid == 0)
-	{
-		printf("-----------------------%p - %llu\n", graph->d_memory_manager->memory.d_data, graph->d_memory_manager->memory.start_index);
-	}
-
-	for(int i = 0; i < graph->d_memory_manager->memory.next_free_chunk; ++i)
-	{
-		auto chunk = reinterpret_cast<CommonChunk*>(MemoryManagerType::ChunkBase::getMemoryAccess(graph->d_memory_manager->memory.d_data, graph->d_memory_manager->memory.start_index, i));
-		auto page_size = chunk->page_size;
-		printf("----- Chunk %d | Page_Size: %u - Chunk Ptr: %p\n", i, page_size, chunk);
-	}
-	printf("Next free chunk: %u\n", graph->d_memory_manager->memory.next_free_chunk);
 }
 
 // ##############################################################################################################################################
@@ -212,7 +185,7 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::edgeInsertion(E
 	// #######################################################################################
 	// Duplicate checking
 	auto block_size = 256;
-	auto grid_size = divup(batch_size, block_size);
+	auto grid_size = Ouro::divup(batch_size, block_size);
 
 	// #######################################################################################
 	// Duplicate checking in batch
@@ -234,12 +207,9 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::edgeInsertion(E
 
 	DEBUG_checkKernelError("After DuplicateCheckingSortedBatch2Graph");
 
-	// d_simpleChunkTests<VertexDataType, EdgeDataType, MemoryManagerType> << <grid_size, block_size >> > (
-	// 	reinterpret_cast<ouroGraph*>(d_graph));
-
 	// #######################################################################################
 	// Insertion
-	grid_size = divup(number_vertices, block_size);
+	grid_size = Ouro::divup(number_vertices, block_size);
 	d_edgeInsertionVertexCentric<VertexDataType, EdgeDataType, MemoryManagerType> << <grid_size, block_size >> >(
 		reinterpret_cast<ouroGraph*>(d_graph),
 		update_batch.d_edge_update.get(),
@@ -253,27 +223,5 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::edgeInsertion(E
 		updateGraphHost(*this);
 		printf("Duplicates detected on the device: %u\n", memory_manager->stats.duplicates_detected);
 	}
-
-	// updateGraphHost(*this);
-	// if(memory_manager->checkError())
-	// {
-	// 	if(ErrorVal<ErrorType, ErrorCodes::OUT_OF_CHUNK_MEMORY>::checkError(memory_manager->error))
-	// 	{
-	// 		if (printDebug)
-	// 			printf("Ran out of chunk memory in edge insertion -> reinitialize\n");
-	// 		reinitialize(1.0f);
-	// 	}
-	// 	if(ErrorVal<ErrorType, ErrorCodes::CHUNK_ENQUEUE_ERROR>::checkError(memory_manager->error))
-	// 	{
-	// 		if (printDebug)
-	// 			printf("Couldn't enqueue all chunks -> try if it works now\n");
-	// 		exit(-1);
-	// 		//memory_manager.handleLostChunks();
-	// 	}
-
-	// 	// Error Handling done, reset flag
-	// 	memory_manager->error = ErrorVal<ErrorType, ErrorCodes::NO_ERROR>::value;
-	// 	updateGraphDevice(*this);
-	// }
 }
 

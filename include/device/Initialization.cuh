@@ -190,7 +190,7 @@ __global__ void d_ouroGraphToCSR(ouroGraph<VertexDataType, EdgeDataType, MemoryM
 //
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
 template <typename DataType>
-void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::initialize(CSR<DataType>& input_graph)
+void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::initialize(const CSR<DataType>& input_graph)
 {
 	int block_size {0};
 	int grid_size {0};

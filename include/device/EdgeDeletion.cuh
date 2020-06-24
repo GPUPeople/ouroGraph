@@ -5,13 +5,45 @@
 
 // ##############################################################################################################################################
 //
+template <typename UpdateDataType>
+__forceinline__ __device__ bool d_binarySearchDeletion(UpdateDataType* edge_update_data, const index_t search_element,
+	const index_t start_index, const index_t number_updates)
+{
+	int lower_bound = start_index;
+	int upper_bound = start_index + (number_updates - 1);
+	index_t search_index;
+	while (lower_bound <= upper_bound)
+	{
+		search_index = lower_bound + ((upper_bound - lower_bound) / 2);
+		index_t update = edge_update_data[search_index].update.destination;
+
+		// First check if we get a hit
+		if (update == search_element)
+		{
+			// We have a duplicate
+			return true;
+		}
+		if (update < search_element)
+		{
+			lower_bound = search_index + 1;
+		}
+		else
+		{
+			upper_bound = search_index - 1;
+		}
+	}
+	return false;
+}
+
+// ##############################################################################################################################################
+//
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
 __global__ void d_edgeDeletionVertexCentric(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
                                             const typename TypeResolution<VertexDataType, EdgeDataType>::EdgeUpdateType* __restrict edge_update_data,
                                             const int batch_size,
                                             const index_t* __restrict update_src_offsets)
 {
-	using QI = typename MemoryManagerType::template QI<EdgeDataType>;
+	using QI = typename MemoryManagerType::QI;
 
 	int tid = threadIdx.x + blockIdx.x*blockDim.x;
 	if (tid >= graph->number_vertices)
@@ -22,7 +54,7 @@ __global__ void d_edgeDeletionVertexCentric(ouroGraph<VertexDataType, EdgeDataTy
 	if (number_updates == 0)
 		return;
 
-	VertexDataType vertex = graph->d_vertices[tid];
+	VertexDataType vertex = graph->vertices.getAt(tid);
 	EdgeDataType* end_iterator{vertex.adjacency + (vertex.meta_data.neighbours)}; // Point to one behind end
 	const auto index_offset = update_src_offsets[(graph->number_vertices + 1) + tid];
 	auto actual_updates{ 0U };
@@ -42,21 +74,20 @@ __global__ void d_edgeDeletionVertexCentric(ouroGraph<VertexDataType, EdgeDataTy
 			++actual_updates;
 			
 			// Do Compaction 
-			vertex.adjacency->destination = end_iterator != vertex.adjacency ? end_iterator->destination : DELETIONMARKER;
+			vertex.adjacency->destination = end_iterator != vertex.adjacency ? end_iterator->destination : DeletionMarker<index_t>::val;
 		}
 		else
 			++(vertex.adjacency);
 	}
 
 	// Do we have to reallocate?
-	const auto queue_index = QI::getQueueIndex(vertex.meta_data.neighbours);
+	const auto queue_index = QI::getQueueIndex(vertex.meta_data.neighbours * sizeof(EdgeDataType));
 	vertex.meta_data.neighbours -= actual_updates;
-	const auto new_queue_index = QI::getQueueIndex(vertex.meta_data.neighbours);
+	const auto new_queue_index = QI::getQueueIndex(vertex.meta_data.neighbours * sizeof(EdgeDataType));
 	if(new_queue_index != queue_index)
 	{
 		// We can shrink our adjacency
-		MemoryIndex new_index;
-		auto adjacency = graph->d_memory_manager->template allocPage<EdgeDataType>(vertex.meta_data.neighbours, new_index);
+		auto adjacency = graph->allocAdjacency(vertex.meta_data.neighbours);
 
 		if(adjacency == nullptr)
 		{
@@ -65,21 +96,19 @@ __global__ void d_edgeDeletionVertexCentric(ouroGraph<VertexDataType, EdgeDataTy
 		}
 
 		// Copy over data vectorized
-		vertex.adjacency = graph->d_vertices[tid].adjacency;
-		auto iterations = divup(vertex.meta_data.neighbours * sizeof(EdgeDataType), sizeof(uint4));
+		auto iterations = Ouro::divup(vertex.meta_data.neighbours * sizeof(EdgeDataType), sizeof(uint4));
 		for (auto i = 0U; i < iterations; ++i)
 		{
 			reinterpret_cast<uint4*>(adjacency)[i] = reinterpret_cast<uint4*>(vertex.adjacency)[i];
 		}
 
 		// Free old page and set new pointer and index
-		graph->d_memory_manager->freePage(vertex.index, vertex.adjacency);
-		graph->d_vertices[tid].adjacency = adjacency;
-		graph->d_vertices[tid].index = new_index;
+		graph->freeAdjacency(vertex.adjacency);
+		graph->vertices.setAdjacencyAt(tid, adjacency);
 	}
 
 	// Update neighbours
-	graph->d_vertices[tid].meta_data.neighbours = vertex.meta_data.neighbours;
+	graph->vertices.setNeighboursAt(tid, vertex.meta_data.neighbours);
 }
 
 // ##############################################################################################################################################
@@ -93,7 +122,7 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::edgeDeletion(Ed
 
 	const int batch_size = update_batch.edge_update.size();
 	auto block_size = 256;
-	int grid_size = divup(number_vertices, block_size);
+	int grid_size = Ouro::divup(number_vertices, block_size);
 
 	// Copy update data to device and sort
 	update_batch.prepareEdgeUpdates(true);
@@ -114,26 +143,4 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::edgeDeletion(Ed
 		pre_processing.d_update_src_helper.get());
 
 	DEBUG_checkKernelError("After Edge Deletion");
-
-	// updateGraphHost(*this);
-	// if (memory_manager->checkError())
-	// {
-	// 	if (ErrorVal<ErrorType, ErrorCodes::OUT_OF_CHUNK_MEMORY>::checkError(memory_manager->error))
-	// 	{
-	// 		if (printDebug)
-	// 			printf("Ran out of chunk memory in edge insertion -> reinitialize\n");
-	// 		reinitialize(1.0f);
-	// 	}
-	// 	if (ErrorVal<ErrorType, ErrorCodes::CHUNK_ENQUEUE_ERROR>::checkError(memory_manager->error))
-	// 	{
-	// 		if (printDebug)
-	// 			printf("Couldn't enqueue all chunks -> try if it works now\n");
-	// 		exit(-1);
-	// 		//memory_manager->handleLostChunks();
-	// 	}
-
-	// 	// Error Handling done, reset flag
-	// 	memory_manager->error = ErrorVal<ErrorType, ErrorCodes::NO_ERROR>::value;
-	// 	updateGraphDevice(*this);
-	// }
 }

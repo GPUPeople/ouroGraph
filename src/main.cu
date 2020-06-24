@@ -15,6 +15,35 @@
 #include "InstanceDefinitions.cuh"
 #include "MemoryLayout.h"
 #include "Verification.h"
+#include "PerformanceMeasurement.cuh"
+#include "device/EdgeInsertion.cuh"
+#include "device/EdgeDeletion.cuh"
+
+#ifdef TEST_CHUNKS
+	#ifdef TEST_VIRTUALIZED
+		using MemoryManagerType = OuroVACQ;
+		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+	#elif TEST_VIRTUALIZED_LINKED
+		using MemoryManagerType = OuroVLCQ;
+		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+	#else
+		using MemoryManagerType = OuroCQ;
+		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+	#endif
+#endif
+
+#ifdef TEST_PAGES
+	#ifdef TEST_VIRTUALIZED
+		using MemoryManagerType = OuroVAPQ;
+		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+	#elif TEST_VIRTUALIZED_LINKED
+		using MemoryManagerType = OuroVLPQ;
+		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+	#else
+		using MemoryManagerType = OuroPQ;
+		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+	#endif
+#endif
 
 // Json Reader
 #include "helper/json.h"
@@ -100,26 +129,115 @@ int main(int argc, char* argv[])
 			<< csr_graph.row_offsets[csr_graph.rows] / csr_graph.rows << "\n";
 		}
 
-		// FLush Graph beforehand
-		for(auto i = 0; i < csr_graph.rows; ++i)
+		// Parameters
+		const auto iterations{config.find("iterations").value().get<int>()};
+		const auto update_iterations{config.find("update_iterations").value().get<int>()};
+		const auto batch_size{config.find("batch_size").value().get<int>()};
+		const auto realistic_deletion{config.find("realistic_deletion").value().get<bool>()};
+		const auto verify_enabled{ config.find("verify").value().get<bool>() };
+		const auto range{config.find("range").value().get<unsigned int>()};
+		unsigned int offset{0};
+		PerfMeasure timing_initialization;
+		PerfMeasure timing_insertion;
+		PerfMeasure timing_deletion;
+
+		printf("%s --- %s --- \n%s", break_line_blue_s, MemoryManagerName.c_str(), break_line_blue_e);
+
+		for (auto round = 0; round < iterations; ++round)
 		{
-			auto offset = csr_graph.row_offsets[i];
-			auto neighbours = csr_graph.row_offsets[i + 1] - offset;
-			for(auto j = 0; j < neighbours; ++j)
+			std::cout << "Round " << round + 1 << std::endl;
+			
+			// Instantiate graph framework
+			ouroGraph<VertexData, EdgeData, MemoryManagerType> graph;
+			Verification<DataType> verification(csr_graph);
+			EdgeUpdateBatch<VertexData, EdgeData, MemoryManagerType> insertion_updates(graph.number_vertices);
+			EdgeUpdateBatch<VertexData, EdgeData, MemoryManagerType> deletion_updates(graph.number_vertices);
+			
+			// #################################
+			// Initialization
+			// #################################
+			timing_initialization.startMeasurement();
+			graph.initialize(csr_graph);
+			timing_initialization.stopMeasurement();
+
+			// Verification
+			if (verify_enabled)
 			{
-				csr_graph.col_ids[offset + j] = i;
+				CSR<DataType> csr_output;
+				graph.ouroGraphToCSR(csr_output);
+				verification.verify(csr_output, "Initialization", OutputCodes::VERIFY_INITIALIZATION);
+			}
+
+			for (auto update_round = 0; update_round < update_iterations; ++update_round, offset += range)
+			{
+				std::cout << "Update-Round " << update_round + 1 << std::endl;
+				insertion_updates.generateEdgeUpdates(graph.number_vertices, batch_size, (round * update_iterations) + update_round, range, offset);
+
+				// #################################
+				// Insertion
+				// #################################
+				timing_insertion.startMeasurement();
+				graph.edgeInsertion(insertion_updates);
+				timing_insertion.stopMeasurement();
+
+				// Verification
+				if (verify_enabled)
+				{
+					CSR<DataType> csr_output;
+					graph.ouroGraphToCSR(csr_output);
+					verification.hostEdgeInsertion(insertion_updates);
+					verification.verify(csr_output, "Insertion", OutputCodes::VERIFY_INSERTION);
+				}
+
+				
+				if (realistic_deletion)
+				{
+					deletion_updates.generateEdgeUpdates(graph, batch_size, (round * update_iterations) + update_round, range, offset);
+					// #################################
+					// Deletion
+					// #################################
+					timing_deletion.startMeasurement();
+					graph.edgeDeletion(deletion_updates);
+					timing_deletion.stopMeasurement();
+
+					// Verification
+					if (verify_enabled)
+					{
+						CSR<DataType> csr_output;
+						graph.ouroGraphToCSR(csr_output);
+						verification.hostEdgeDeletion(deletion_updates);
+						verification.verify(csr_output, "Deletion", OutputCodes::VERIFY_DELETION);
+					}
+				}
+				else
+				{
+					// #################################
+					// Deletion
+					// #################################
+					timing_deletion.startMeasurement();
+					graph.edgeDeletion(insertion_updates);
+					timing_deletion.stopMeasurement();
+
+					// Verification
+					if (verify_enabled)
+					{
+						CSR<DataType> csr_output;
+						graph.ouroGraphToCSR(csr_output);
+						verification.hostEdgeDeletion(insertion_updates);
+						verification.verify(csr_output, "Deletion", OutputCodes::VERIFY_DELETION);
+					}
+				}
+				
 			}
 		}
 
-		// Graph Testcase
-		ouroGraph<VertexData, EdgeData, OuroPQ> graph;
-		graph.initialize(csr_graph);
-		CSR<DataType> csr_output;
-		graph.ouroGraphToCSR(csr_output);
+		const auto init_res   = timing_initialization.generateResult();
+		const auto insert_res = timing_insertion.generateResult();
+		const auto delete_res = timing_deletion.generateResult();
 
-		// Verification
-		Verification<DataType> verification(csr_graph);
-		verification.verify(csr_output, "Initialization", OutputCodes::VERIFY_INITIALIZATION);
+		std::cout << "Init   Timing: " << init_res.mean_   << " ms | Median: " << init_res.median_   << std::endl;
+		std::cout << "Insert Timing: " << insert_res.mean_ << " ms | Median: " << insert_res.median_ << std::endl;
+		std::cout << "Delete Timing: " << delete_res.mean_ << " ms | Median: " << delete_res.median_ << std::endl;
 	}
 
 	return 0;

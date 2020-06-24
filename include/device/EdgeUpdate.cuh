@@ -44,7 +44,7 @@ inline void EdgeDataWeightUpdateDevice::bringDataInOrder()
 {
 	CudaUniquePtr<vertex_t> d_helper_weights(size);
 	auto block_size = 256;
-	auto grid_size = divup(size , block_size);
+	auto grid_size = Ouro::divup(size , block_size);
 	d_bringInOrder<int><<<grid_size, block_size>>>(size, pos.get(), d_weights.get(), d_helper_weights.get());
 	d_weights = std::move(d_helper_weights);
 }
@@ -57,7 +57,7 @@ struct EdgeUpdatePreProcessing
 		using UpdateType = typename TypeResolution<VertexDataType, EdgeDataType>::EdgeUpdateType;
 		const int batch_size = update_batch.edge_update.size();
 		auto block_size = 256;
-		int grid_size = divup(batch_size, block_size);
+		int grid_size = Ouro::divup(batch_size, block_size);
 
 		// Allocate update helper
 		d_update_src_helper.allocate((number_vertices + 1) * 2);
@@ -149,13 +149,13 @@ void EdgeUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>::generateE
         }
         else
         {
-            edge_update_cub.setValue(i, (src << (32 - cntlz(number_vertices))) + dest);
+            edge_update_cub.setValue(i, (src << (32 - Ouro::cntlz(number_vertices))) + dest);
         }        
     }
 }
 
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-void EdgeUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>::generateEdgeUpdates(DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dynGraph, size_t batch_size, unsigned int seed, unsigned int range, unsigned int offset)
+void EdgeUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>::generateEdgeUpdates(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>& ouroGraph, size_t batch_size, unsigned int seed, unsigned int range, unsigned int offset)
 {
     if(THRUST_SORT)
     {
@@ -168,7 +168,7 @@ void EdgeUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>::generateE
 
     // Get current graph
     CSR<float> current_graph;
-    dynGraph.dynGraphToCSR(current_graph);
+    ouroGraph.ouroGraphToCSR(current_graph);
 
     srand(seed + 1);
     for(decltype(batch_size) i = 0; i < batch_size; ++i)
@@ -192,7 +192,7 @@ void EdgeUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>::generateE
         }
         else
         {
-            edge_update_cub.setValue(i, (src << (32 - cntlz(current_graph.rows))) + dest);
+            edge_update_cub.setValue(i, (src << (32 - Ouro::cntlz(current_graph.rows))) + dest);
         }   
     }
 }
