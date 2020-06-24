@@ -1,10 +1,9 @@
 #pragma once
 
 #include "Utility.h"
-#include "PerformanceMeasure.cuh"
 #include "device/CudaUniquePtr.cuh"
 #include "MemoryLayout.h"
-#include "device/dynGraph.cuh"
+#include "device/ouroGraph.cuh"
 
 enum class PageRankVariant
 {
@@ -13,21 +12,21 @@ enum class PageRankVariant
 };
 
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-struct DynGraph;
+struct ouroGraph;
 
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
 class PageRank
 {
 	public:
-	PageRank(const DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dyn_graph)
+	PageRank(const ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>& graph)
 	{
-		d_page_rank.allocate(dyn_graph.number_vertices);
-		d_next_page_rank.allocate(dyn_graph.number_vertices);
-		d_absolute_difference.allocate(dyn_graph.number_vertices);
-		d_diff_sum.allocate(dyn_graph.number_vertices);
+		d_page_rank.allocate(graph.number_vertices);
+		d_next_page_rank.allocate(graph.number_vertices);
+		d_absolute_difference.allocate(graph.number_vertices);
+		d_diff_sum.allocate(graph.number_vertices);
 
-		d_accumulated_page_count.allocate(dyn_graph.number_vertices + 1);
-		d_page_count.allocate(dyn_graph.number_vertices + 1);
+		d_accumulated_page_count.allocate(graph.number_vertices + 1);
+		d_page_count.allocate(graph.number_vertices + 1);
 	}
 
 	void initializePageRankVector(float initial_value, uint32_t number_values)
@@ -37,9 +36,9 @@ class PageRank
 	}
 
 	//! Performs PageRank computation on aimGraph, naive implementation
-	float algPageRankNaive(const DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dyn_graph, PerfMeasure& performance);
+	float algPageRankNaive(const ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>& graph);
 	//! Performs PageRank computation on aimGraph, page-balanced implementation
-	float algPageRankBalanced(const DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dyn_graph, PerfMeasure& performance);
+	float algPageRankBalanced(const ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>& graph);
 
 	// Members on device
 	CudaUniquePtr<float> d_page_rank;
@@ -54,6 +53,5 @@ class PageRank
 	//Member on host
 	float dampening_factor{ 0.85f };
 	PageRankVariant variant{ PageRankVariant::NAIVE };
-	cudaEvent_t ce_start, ce_stop;
 	unsigned int warp_count{0};
 };

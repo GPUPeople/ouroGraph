@@ -25,23 +25,23 @@
 		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
 	#elif TEST_VIRTUALIZED_LINKED
 		using MemoryManagerType = OuroVLCQ;
-		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+		const std::string MemoryManagerName("Ouroboros - Virtualized Linked-Chunk - Chunks");
 	#else
 		using MemoryManagerType = OuroCQ;
-		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+		const std::string MemoryManagerName("Ouroboros - Standard - Chunks");
 	#endif
 #endif
 
 #ifdef TEST_PAGES
 	#ifdef TEST_VIRTUALIZED
 		using MemoryManagerType = OuroVAPQ;
-		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Pages");
 	#elif TEST_VIRTUALIZED_LINKED
 		using MemoryManagerType = OuroVLPQ;
-		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+		const std::string MemoryManagerName("Ouroboros - Virtualized Linked-Chunk - Pages");
 	#else
 		using MemoryManagerType = OuroPQ;
-		const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Chunks");
+		const std::string MemoryManagerName("Ouroboros - Standard - Pages");
 	#endif
 #endif
 

@@ -105,3 +105,13 @@ add_executable(vl_main_c
 target_compile_definitions(vl_main_c PUBLIC TEST_CHUNKS TEST_VIRTUALLIST)
 target_link_libraries(vl_main_c helper)
 endif()
+
+##########################################################################
+# PageRank
+##########################################################################
+
+add_executable(pagerank
+	src/algorithms/PageRank.cu
+	${OUROGRAPHHEADERS}
+)
+target_link_libraries(pagerank helper)
