@@ -38,35 +38,6 @@ int main(int argc, char* argv[])
 	if (printDebug)
 		printf("%sdynGraph\n%s", break_line_blue_s, break_line_blue_e);
 
-	if (statistics_enabled)
-	{
-		printf("\033[0;36m############## -  ON - Statistics\033[0m\n");
-		if (printStats)
-			printf("\033[0;36m############## -  ON - Print Statistics\033[0m\n");
-		else
-		{
-			printf("\033[0;36m############## - OFF - Print Statistics\033[0m\n");
-		}
-	}
-
-	if (printStats)
-	{
-		printf("%sLaunch Parameters:\n%s", break_line_blue_s, break_line_blue_e);
-		printf("%7u | Smallest Page Size in Bytes\n", SMALLEST_PAGE_SIZE);
-		printf("%7u | Chunk Size in Bytes\n", CHUNK_SIZE);
-		printf("%7u | Number of Queues\n", NUM_QUEUES);
-		printf("%7u | Vertex Queue Size\n", vertex_queue_size);
-		printf("%7u | Page Queue Size\n", page_queue_size);
-		printf("%s", break_line_blue);
-	}
-
-	auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t);
-
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d__%H-%M-%S");
-    auto time_string = oss.str();
-
 	// Parse config
 	std::ifstream json_input(argv[1]);
 	json config;
@@ -76,28 +47,7 @@ int main(int argc, char* argv[])
 	cudaSetDevice(device);
 	cudaDeviceProp prop;
 	cudaGetDeviceProperties(&prop, device);
-	const auto write_csv{config.find("write_csv").value().get<bool>()};
-	std::ofstream results;
-	if(write_csv)
-	{
-		results.open((std::string("../tests/stc/results/perf_") + prop.name + "---" + time_string + ".csv").c_str(), std::ios_base::app);
-		writeGPUInfo(results);
-		// One empty line
-		results << "\n";
-		results << "Graph;num_vertices;num_edges;adj_mean;adj_std_dev;adj_min;adj_max;naive;naivewarp;balanced;balancedwarp;triangle_count;\n";
-	}
-	else
-	{
-		if(printDebug)
-			std::cout << "Going to use " << prop.name << " " << prop.major << "." << prop.minor << "\n";
-	}
-	
-	cudaDeviceSetLimit(cudaLimitMallocHeapSize, cuda_heap_size);
-	size_t size;
-	cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
-	if(printDebug)
-		printf("Heap Size: ~%llu MB\n", size / (1024 * 1024));
-
+	std::cout << "Going to use " << prop.name << " " << prop.major << "." << prop.minor << "\n";
 
 	auto graphs = *config.find("graphs");
 	for(auto const& elem : graphs)
@@ -164,7 +114,6 @@ int main(int argc, char* argv[])
 		unsigned int tc_naive, tc_naive_warp, tc_balanced, tc_balanced_warp;
 		for(auto i = 0; i < iterations; ++i)
 		{
-			std::cout << "PageRank-Round: " << i + 1 << std::endl;
 			ouroGraph<VertexData, EdgeData, MemoryManagerType> graph;
 
 			// Initialize

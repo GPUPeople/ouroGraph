@@ -107,10 +107,20 @@ target_link_libraries(vl_main_c helper)
 endif()
 
 ##########################################################################
+##########################################################################
+##########################################################################
+# Algorithms
+##########################################################################
+##########################################################################
+##########################################################################
+
+##########################################################################
 # PageRank
 ##########################################################################
 
 add_executable(pagerank
+	include/algorithms/PageRank.cuh
+	include/algorithms/PageRank_impl.cuh	
 	src/algorithms/PageRank.cu
 	${OUROGRAPHHEADERS}
 )
@@ -121,7 +131,22 @@ target_link_libraries(pagerank helper)
 ##########################################################################
 
 add_executable(stc
+	include/algorithms/STC.cuh
+	include/algorithms/STC_impl.cuh
 	src/algorithms/STC.cu
 	${OUROGRAPHHEADERS}
 )
 target_link_libraries(stc helper)
+
+##########################################################################
+# BFS
+##########################################################################
+
+add_executable(bfs
+	include/algorithms/BFS.cuh
+	include/algorithms/BFS_impl.cuh
+	src/algorithms/BFS.cu
+	${OUROGRAPHHEADERS}
+)
+set_property(TARGET bfs PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+target_link_libraries(bfs helper)

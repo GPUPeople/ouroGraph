@@ -18,6 +18,7 @@ struct ouroGraph
 	struct Vertices
 	{
 		__device__ __forceinline__ VertexDataType getAt(const int index) { return d_vertices[-index]; }
+		__device__ __forceinline__ unsigned int getNeighboursAt(const int index) { return d_vertices[-index].meta_data.neighbours; }
 		__device__ __forceinline__ VertexDataType* getPtrAt(const int index) { return &d_vertices[-index]; }
 		__device__ __forceinline__ void setAt(const int index, const VertexDataType& vertex) { d_vertices[-index] = vertex; }
 		__device__ __forceinline__ void setAdjacencyAt(const int index, EdgeDataType* adjacency) { d_vertices[-index].adjacency = adjacency; }
