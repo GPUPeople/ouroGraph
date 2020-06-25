@@ -1,489 +1,331 @@
-#include "STC.cuh"
-#include "device/dynGraph_impl.cuh"
+#include <iostream>
+#include <string>
+#include <fstream>
+#include <map>
+#include <iomanip>
+#include <ctime>
+#include <sstream>
 
-#include <thrust/device_vector.h>
-
+#include "CSR.h"
+#include "dCSR.h"
+#include "COO.h"
+#include "Utility.h"
+#include "PerformanceMeasurement.cuh"
+#include "device/ouroGraph_impl.cuh"
+#include "device/Initialization.cuh"
+#include "algorithms/STC_impl.cuh"
 #include "InstanceDefinitions.cuh"
 
-//#define TEST_WARPS
+// Json Reader
+#include "helper/json.h"
 
-static constexpr int step_size{16};
+static constexpr bool computeHostMode{false};
+using json = nlohmann::json;
+using DataType = float;
+using MemoryManagerType = OuroPQ;
+const std::string MemoryManagerName("Ouroboros - Standard - Pages");
 
-//------------------------------------------------------------------------------
-// Device funtionality
-//------------------------------------------------------------------------------
-//
-//
-//------------------------------------------------------------------------------
-//
-template <typename EdgeDataType>
-__forceinline__ __device__ bool d_binarySearchOnPage(EdgeDataType* adjacency, index_t search_element, unsigned int number_elements_to_check)
+
+uint32_t host_StaticTriangleCounting(CSR<DataType>& input_graph);
+
+int main(int argc, char* argv[])
 {
-	int lower_bound = 0;
-	int upper_bound = (number_elements_to_check - 1);
-	while (lower_bound <= upper_bound)
+	if (argc == 1)
 	{
-		index_t search_index = lower_bound + ((upper_bound - lower_bound) / 2);
-		auto element = adjacency[search_index].destination;
+		std::cout << "Require config file as first argument" << std::endl;
+		return -1;
+	}
+	if (printDebug)
+		printf("%sdynGraph\n%s", break_line_blue_s, break_line_blue_e);
 
-		// First check if we get a hit
-		if (element == search_element)
-		{
-			// We have found it
-			return true;
-		}
-		else if (element < search_element)
-		{
-			lower_bound = search_index + 1;
-		}
+	if (statistics_enabled)
+	{
+		printf("\033[0;36m############## -  ON - Statistics\033[0m\n");
+		if (printStats)
+			printf("\033[0;36m############## -  ON - Print Statistics\033[0m\n");
 		else
 		{
-			upper_bound = search_index - 1;
+			printf("\033[0;36m############## - OFF - Print Statistics\033[0m\n");
 		}
 	}
-	return false;
-}
 
+	if (printStats)
+	{
+		printf("%sLaunch Parameters:\n%s", break_line_blue_s, break_line_blue_e);
+		printf("%7u | Smallest Page Size in Bytes\n", SMALLEST_PAGE_SIZE);
+		printf("%7u | Chunk Size in Bytes\n", CHUNK_SIZE);
+		printf("%7u | Number of Queues\n", NUM_QUEUES);
+		printf("%7u | Vertex Queue Size\n", vertex_queue_size);
+		printf("%7u | Page Queue Size\n", page_queue_size);
+		printf("%s", break_line_blue);
+	}
 
-//
-// ##############################################################################################################################################
-//
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-__global__ void d_STCNaive(DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
-	                       uint32_t* triangles)
-{
-	int tid = threadIdx.x + blockIdx.x*blockDim.x;
-	if (tid >= graph->number_vertices)
-		return;
+	auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d__%H-%M-%S");
+    auto time_string = oss.str();
+
+	// Parse config
+	std::ifstream json_input(argv[1]);
+	json config;
+	json_input >> config;
 	
-	// STC
-	VertexDataType* vertices = graph->d_vertices;
-	auto vertex = vertices[tid];
-
-	// Iterate over neighbours
-	for(auto i = 0U; i < (vertex.meta_data.neighbours - 1); ++i)
+	const auto device{config.find("device").value().get<int>()};
+	cudaSetDevice(device);
+	cudaDeviceProp prop;
+	cudaGetDeviceProperties(&prop, device);
+	const auto write_csv{config.find("write_csv").value().get<bool>()};
+	std::ofstream results;
+	if(write_csv)
 	{
-		// Retrieve each vertex index and for vertex index i, go over vertices i+1 to capacity
-		// and check in every adjacency list of those vertices, if vertex i is included
-		// Then we found a triangle
-		auto compare_value = vertex.adjacency[i].destination;
-		if(compare_value > tid)
-		{
-			// Only the largest index registers the triangle
-			break;
-		}
-		for(auto j = i + 1; j < vertex.meta_data.neighbours; ++j)
-		{
-			auto running_index = vertex.adjacency[j].destination;
-			if (running_index > tid)
-			{
-				// Only the largest index registers the triangle
-				break;
-			}
-			auto running_vertex = vertices[running_index];
-			while(true)
-			{
-				if(running_vertex.meta_data.neighbours > step_size)
-				{
-					if(running_vertex.adjacency[step_size].destination <= compare_value)
-					{
-						running_vertex.adjacency += step_size;
-						running_vertex.meta_data.neighbours -= step_size;
-					}
-					else
-						break;
-				}
-				else
-					break;
-			}
-			if(running_vertex.meta_data.neighbours > step_size)
-				running_vertex.meta_data.neighbours = step_size;
-
-			if (d_binarySearchOnPage(running_vertex.adjacency, compare_value, running_vertex.meta_data.neighbours))
-			{
-				atomicAdd(&triangles[tid], 1);
-				atomicAdd(&triangles[compare_value], 1);
-				atomicAdd(&triangles[running_index], 1);
-			}
-		}
-	}
-}
-
-// ##############################################################################################################################################
-//
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-__global__ void d_STCNaive_w(DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
-                             uint32_t* triangles)
-{
-	int tid = (threadIdx.x + blockIdx.x*blockDim.x) / WARP_SIZE;
-	if (tid >= graph->number_vertices)
-		return;
-	
-	// STC
-	VertexDataType* vertices = graph->d_vertices;
-	auto vertex = vertices[tid];
-
-	// Iterate over neighbours
-	for (auto i = 0U; i < (vertex.meta_data.neighbours - 1); ++i)
-	{
-		// Retrieve each vertex index and for vertex index i, go over vertices i+1 to capacity
-		// and check in every adjacency list of those vertices, if vertex i is included
-		// Then we found a triangle
-		auto compare_value = vertex.adjacency[i].destination;
-		if (compare_value > tid)
-		{
-			// Only the largest index registers the triangle
-			break;
-		}
-		for (auto j = i + 1; j < vertex.meta_data.neighbours; ++j)
-		{
-			auto running_index = vertex.adjacency[j].destination;
-			if (running_index > tid)
-			{
-				// Only the largest index registers the triangle
-				break;
-			}
-			auto running_vertex = vertices[running_index];
-
-			for(auto k = threadIdx.x & (WARP_SIZE - 1); k < running_vertex.meta_data.neighbours; k += WARP_SIZE)
-			{
-				auto edge = running_vertex.adjacency[k].destination;
-				int predicate = 0;
-				if(edge >= compare_value)
-				{
-					predicate = 1;
-					if(edge == compare_value)
-					{
-						atomicAdd(&triangles[tid], 1);
-						atomicAdd(&triangles[compare_value], 1);
-						atomicAdd(&triangles[running_index], 1);
-					}
-				}
-				unsigned int current_warp_border = (k - (threadIdx.x & (WARP_SIZE - 1)));
-				// If one did the work or we are already larger, we are done
-				if (__any_sync((1 << min(WARP_SIZE, running_vertex.meta_data.neighbours - current_warp_border)) - 1, predicate))
-					break;
-			}
-			__syncwarp();
-		}
-	}
-}
-
-// ##############################################################################################################################################
-//
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-__global__ void d_STCBalanced(DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
-                              uint32_t* triangles,
-                              vertex_t* vertex_index,
-                              vertex_t* page_per_vertex_index,
-                              int warp_count)
-{
-	int tid = threadIdx.x + blockIdx.x*blockDim.x;
-	if (tid >= warp_count)
-		return;
-
-	const auto index = vertex_index[tid];
-	const auto page_index = page_per_vertex_index[tid];
-	VertexDataType* vertices = graph->d_vertices;
-	auto vertex = vertices[index];
-	auto iterations = (((page_index + 1) * step_size) <= vertex.meta_data.neighbours) ? step_size : vertex.meta_data.neighbours - (page_index * step_size);
-	const auto offset_index = page_index * step_size;
-
-	for(auto i = 0; i < iterations; ++i)
-	{
-		// Retrieve each vertex index and for vertex index i, go over vertices i+1 to capacity
-		// and check in every adjacency list of those vertices, if vertex i is included
-		// Then we found a triangle
-		auto compare_value = vertex.adjacency[offset_index + i].destination;
-		if (compare_value > index)
-		{
-			// Only the largest index registers the triangle
-			break;
-		}
-		for (auto j = offset_index + i + 1; j < vertex.meta_data.neighbours; ++j)
-		{
-			auto running_index = vertex.adjacency[j].destination;
-			if (running_index > index)
-			{
-				// Only the largest index registers the triangle
-				break;
-			}
-			auto running_vertex = vertices[running_index];
-			while(true)
-			{
-				if(running_vertex.meta_data.neighbours > step_size)
-				{
-					if(running_vertex.adjacency[step_size].destination <= compare_value)
-					{
-						running_vertex.adjacency += step_size;
-						running_vertex.meta_data.neighbours -= step_size;
-					}
-					else
-						break;
-				}
-				else
-					break;
-			}
-			if(running_vertex.meta_data.neighbours > step_size)
-				running_vertex.meta_data.neighbours = step_size;
-
-
-			if (d_binarySearchOnPage(running_vertex.adjacency, compare_value, running_vertex.meta_data.neighbours))
-			{
-				atomicAdd(&triangles[index], 1);
-				atomicAdd(&triangles[compare_value], 1);
-				atomicAdd(&triangles[running_index], 1);
-			}
-		}
-	}
-}
-
-// ##############################################################################################################################################
-//
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-__global__ void d_STCBalanced_w(DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
-                                uint32_t* triangles,
-                                vertex_t* vertex_index,
-                                vertex_t* page_per_vertex_index,
-                                int warp_count)
-{
-	int tid = (threadIdx.x + blockIdx.x*blockDim.x) / WARP_SIZE;
-	if (tid >= warp_count || (threadIdx.x & (WARP_SIZE - 1)) >= step_size)
-		return;
-
-	const auto index = vertex_index[tid];
-	const auto page_index = page_per_vertex_index[tid];
-	VertexDataType* vertices = graph->d_vertices;
-	auto vertex = vertices[index];
-	auto iterations = (((page_index + 1) * step_size) <= vertex.meta_data.neighbours) ? step_size : vertex.meta_data.neighbours - (page_index * step_size);
-	const auto offset_index = page_index * step_size;
-
-	for (auto i = 0; i < iterations; ++i)
-	{
-		// Retrieve each vertex index and for vertex index i, go over vertices i+1 to capacity
-		// and check in every adjacency list of those vertices, if vertex i is included
-		// Then we found a triangle
-		auto compare_value = vertex.adjacency[offset_index + i].destination;
-		if (compare_value > index)
-		{
-			// Only the largest index registers the triangle
-			break;
-		}
-		for (auto j = offset_index + i + 1; j < vertex.meta_data.neighbours; ++j)
-		{
-			auto running_index = vertex.adjacency[j].destination;
-			if (running_index > index)
-			{
-				// Only the largest index registers the triangle
-				break;
-			}
-			auto running_vertex = vertices[running_index];
-			for (auto k = threadIdx.x & (WARP_SIZE - 1); k < running_vertex.meta_data.neighbours; k += step_size)
-			{
-				auto edge = running_vertex.adjacency[k].destination;
-				int predicate = 0;
-				if (edge >= compare_value)
-				{
-					predicate = 1;
-					if (edge == compare_value)
-					{
-						atomicAdd(&triangles[index], 1);
-						atomicAdd(&triangles[compare_value], 1);
-						atomicAdd(&triangles[running_index], 1);
-					}
-				}
-				unsigned int current_warp_border = (k - (threadIdx.x & (WARP_SIZE - 1)));
-				// If one did the work or we are already larger, we are done
-				if (__any_sync((1 << min(step_size, running_vertex.meta_data.neighbours - current_warp_border)) - 1, predicate))
-					break;
-			}
-			__syncwarp();
-		}
-	}
-}
-
-// ##############################################################################################################################################
-//
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-__global__ void d_calculateWarpsPerAdjacency(DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
-                                             vertex_t* d_page_count)
-{
-	int tid = threadIdx.x + blockIdx.x*blockDim.x;
-	if (tid >= graph->number_vertices)
-		return;
-	
-	VertexDataType vertex = graph->d_vertices[tid];
-	d_page_count[tid] = divup(vertex.meta_data.neighbours, step_size);
-}
-
-// ##############################################################################################################################################
-//
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-__global__ void d_calculateOffsetsForSTC(DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
-                                         vertex_t* accumulated_page_count,
-                                         vertex_t* vertex_index,
-                                         vertex_t* page_per_vertex_index)
-{
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-	if (tid >= graph->number_vertices)
-		return;
-
-	const auto offset = accumulated_page_count[tid];
-	const auto pages_per_vertex = accumulated_page_count[tid + 1] - offset;
-
-	for (auto i = 0U; i < pages_per_vertex; ++i)
-	{
-		vertex_index[offset + i] = tid;
-		page_per_vertex_index[offset + i] = i;
-	}
-}
-
-
-
-//------------------------------------------------------------------------------
-// Host funtionality
-//------------------------------------------------------------------------------
-//
-
-//------------------------------------------------------------------------------
-//
-//! Performs STC computation on aimGraph, naive implementation
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-uint32_t STC<VertexDataType, EdgeDataType, MemoryManagerType>::algSTCNaive(const DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dyn_graph, PerfMeasure& performance)
-{
-	uint32_t triangle_count;
-	start_clock(ce_start, ce_stop);
-
-	d_triangles.memSet(0, dyn_graph.number_vertices);
-
-	if(variant == STCVariant::WARPSIZED)
-	{
-		int block_size = 256;
-		int grid_size = divup(dyn_graph.number_vertices, block_size / WARP_SIZE);
-		d_STCNaive_w<VertexDataType, EdgeDataType> << <grid_size, block_size >> > (
-			reinterpret_cast<DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>*>(dyn_graph.d_graph),
-			d_triangles.get());
+		results.open((std::string("../tests/stc/results/perf_") + prop.name + "---" + time_string + ".csv").c_str(), std::ios_base::app);
+		writeGPUInfo(results);
+		// One empty line
+		results << "\n";
+		results << "Graph;num_vertices;num_edges;adj_mean;adj_std_dev;adj_min;adj_max;naive;naivewarp;balanced;balancedwarp;triangle_count;\n";
 	}
 	else
 	{
-		int block_size = 256;
-		int grid_size = divup(dyn_graph.number_vertices, block_size);
-		d_STCNaive<VertexDataType, EdgeDataType> << <grid_size, block_size >> > (
-			reinterpret_cast<DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>*>(dyn_graph.d_graph),
-			d_triangles.get());
+		if(printDebug)
+			std::cout << "Going to use " << prop.name << " " << prop.major << "." << prop.minor << "\n";
 	}
+	
+	cudaDeviceSetLimit(cudaLimitMallocHeapSize, cuda_heap_size);
+	size_t size;
+	cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
+	if(printDebug)
+		printf("Heap Size: ~%llu MB\n", size / (1024 * 1024));
 
-	float measurement = end_clock(ce_start, ce_stop);
-	if(showPerformanceOutputPerRound)
-		printf("Timing: %f ms\n", measurement);
-	performance.measurements_.push_back(measurement);
 
-	if (global_TC_count)
+	auto graphs = *config.find("graphs");
+	for(auto const& elem : graphs)
 	{
-		// Prefix scan on d_triangles to get number of triangles
-		thrust::device_ptr<uint32_t> th_triangles(d_triangles.get());
-		thrust::device_ptr<uint32_t> th_triangle_count(d_triangle_count.get());
-		thrust::inclusive_scan(th_triangles, th_triangles + dyn_graph.number_vertices, th_triangle_count);
+		std::string filename = elem.find("filename").value().get<std::string>();
+		CSR<DataType> csr_graph;
+		//try load csr file
+		std::string csr_name = filename + ".csr";
+		printTestcaseSeparator(filename);
+		try
+		{
+			std::cout << "trying to load csr file \"" << csr_name << "\"\n";
+			csr_graph = loadCSR<DataType>(csr_name.c_str());
+			std::cout << "succesfully loaded: \"" << csr_name << "\"\n";
+		}
+		catch (std::exception& ex)
+		{
+			std::cout << "could not load csr file:\n\t" << ex.what() << "\n";
+			try
+			{
+				filename += std::string(".mtx");
+				std::cout << "trying to load mtx file \"" << filename << "\"\n";
+				auto coo_mat = loadMTX<DataType>(filename.c_str());
+				convert(csr_graph, coo_mat);
+				std::cout << "succesfully loaded and converted: \"" << csr_name << "\"\n";
+			}
+			catch (std::exception& ex)
+			{
+				std::cout << ex.what() << std::endl;
+				return -1;
+			}
+			try
+			{
+				std::cout << "write csr file for future use\n";
+				storeCSR(csr_graph, csr_name.c_str());
+			}
+			catch (std::exception& ex)
+			{
+				std::cout << ex.what() << std::endl;
+			}
+		}
 
-		// Copy result back to host
-		d_triangles.copyFromDevice(triangles.get(), dyn_graph.number_vertices);
-		d_triangle_count.copyFromDevice(&triangle_count, 1, (dyn_graph.number_vertices - 1));
-
-		// // Report back number of triangles
-		//std::cout << "Triangle count is " << triangle_count << std::endl;
-
-		return triangle_count;
-	}
-	return 0;
-}
-
-//------------------------------------------------------------------------------
-//
-//! Performs STC computation on aimGraph, page-balanced implementation
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-uint32_t STC<VertexDataType, EdgeDataType, MemoryManagerType>::algSTCBalanced(const DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dyn_graph, PerfMeasure& performance)
-{
-	uint32_t triangle_count;
-	start_clock(ce_start, ce_stop);
-
-	int block_size = 256;
-	int grid_size = divup(dyn_graph.number_vertices, block_size);
-
-	d_triangles.memSet(0, dyn_graph.number_vertices);
-
-	if(warp_count == 0)
-	{
-		d_calculateWarpsPerAdjacency<VertexDataType, EdgeDataType, MemoryManagerType><<<grid_size, block_size>>>(
-			reinterpret_cast<DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>*>(dyn_graph.d_graph),
-			d_page_count.get());
+		printf("Using: %s with %llu vertices and %llu edges\n", argv[1], csr_graph.rows, csr_graph.nnz);
+		if(printDebug)
+		{
+			auto max_adjacency_length = 0U;
+			auto min_adjacency_length = 0xFFFFFFFFU;
+			for(auto i = 0U; i < csr_graph.rows; ++i)
+			{
+				auto neighbours = csr_graph.row_offsets[i + 1] - csr_graph.row_offsets[i];
+				max_adjacency_length = std::max(max_adjacency_length, neighbours);
+				min_adjacency_length = std::min(min_adjacency_length, neighbours);
+			}
+			printf("Smallest Adjacency: %u | Largest Adjacency: %u | Average Adjacency: %u\n", min_adjacency_length, max_adjacency_length, csr_graph.row_offsets[csr_graph.rows] / csr_graph.rows);
+		}
 		
-		// Number of warps in general
-		thrust::device_ptr<vertex_t> th_pages_per_adjacency(d_page_count.get());
-		thrust::exclusive_scan(th_pages_per_adjacency, th_pages_per_adjacency + dyn_graph.number_vertices + 1, th_pages_per_adjacency);
+		const auto iterations{config.find("iterations").value().get<int>()};
+		const auto stc_iterations{config.find("stc_iterations").value().get<int>()};
+		PerfMeasure naive_initialization;
+		PerfMeasure naive_warp_initialization;
+		PerfMeasure balanced_initialization;
+		PerfMeasure balanced_warp_initialization;
+		bool print_global_stc{true};
+		unsigned int tc_naive, tc_naive_warp, tc_balanced, tc_balanced_warp;
+		for(auto i = 0; i < iterations; ++i)
+		{
+			std::cout << "PageRank-Round: " << i + 1 << std::endl;
+			ouroGraph<VertexData, EdgeData, MemoryManagerType> graph;
 
-		// How many warps in total
-		d_page_count.copyFromDevice(&warp_count, 1, dyn_graph.number_vertices);
+			// Initialize
+			graph.initialize(csr_graph);
+			
+			unsigned int iter{20};
+			for(auto j = 0U; j < stc_iterations; ++j)
+			{
+				std::cout << "STC-Round: " << j + 1 << std::endl;
 
-		// Setup offset vectors
-		d_vertex_index.allocate(warp_count);
-		d_page_per_vertex_index.allocate(warp_count);
+				STC<VertexData, EdgeData, MemoryManagerType> stc(graph);
 
-		d_calculateOffsetsForSTC<VertexDataType, EdgeDataType> << <grid_size, block_size >> > (
-			reinterpret_cast<DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>*>(dyn_graph.d_graph),
-			d_page_count.get(),
-			d_vertex_index.get(),
-			d_page_per_vertex_index.get());
+				stc.variant = STCVariant::NAIVE;
+				for (auto k = 0U; k < iter; ++k)
+				{
+					naive_initialization.startMeasurement();
+					tc_naive = stc.algSTCNaive(graph, print_global_stc);
+					naive_initialization.stopMeasurement();
+				}
+				if(print_global_stc)
+					std::cout << "Global Triangle Count | Naive: " << tc_naive << std::endl;
+
+				stc.variant = STCVariant::WARPSIZED;
+				for (auto k = 0U; k < iter; ++k)
+				{
+					naive_warp_initialization.startMeasurement();
+					tc_naive_warp = stc.algSTCNaive(graph, print_global_stc);
+					naive_warp_initialization.stopMeasurement();
+				}
+				if(print_global_stc)
+					std::cout << "Global Triangle Count | Naive Warp: " << tc_naive_warp << std::endl;
+
+				stc.variant = STCVariant::BALANCED;
+				for (auto k = 0U; k < iter; ++k)
+				{
+					balanced_initialization.startMeasurement();
+					tc_balanced = stc.algSTCBalanced(graph, print_global_stc);
+					balanced_initialization.startMeasurement();
+				}
+				if(print_global_stc)
+					std::cout << "Global Triangle Count | Balanced: " << tc_balanced << std::endl;
+
+				stc.variant = STCVariant::WARPSIZEDBALANCED;
+				for (auto k = 0U; k < iter; ++k)
+				{
+					balanced_warp_initialization.startMeasurement();
+					tc_balanced_warp = stc.algSTCBalanced(graph, print_global_stc);
+					balanced_warp_initialization.startMeasurement();
+				}
+				if(print_global_stc)
+					std::cout << "Global Triangle Count | Balanced Warp: " << tc_balanced_warp << std::endl;
+			}
+		}
+
+		auto output_correct{true};
+		if(print_global_stc)
+		{
+			if(tc_naive != tc_naive_warp || tc_naive != tc_balanced || tc_naive != tc_balanced_warp)
+			{
+				printf("Output does not seem to match!\n");
+				printf("Naive: %u | Naive Warp: %u | Balanced: %u | Balanced Warp: %u\n", tc_naive, tc_naive_warp, tc_balanced, tc_balanced_warp);
+				output_correct = false;
+			}
+		}
+
+		auto host_triangle_count{0U};
+		if(computeHostMode)
+		{
+			printf("Host Count\n");
+			host_triangle_count = host_StaticTriangleCounting(csr_graph);
+			if(host_triangle_count != tc_naive || !output_correct)
+			{
+				printf("Output does not seem to match!\n");
+				printf("Host: %u | Naive: %u \n", host_triangle_count, tc_naive);
+				exit(-1);
+			}
+			else
+				printf("Triangle Count is: %u\n", host_triangle_count);
+		}
+		else
+			printf("Triangle Count is: %u\n", tc_naive);
+
+		const auto naive_res   = naive_initialization.generateResult();
+		const auto naive_warp_res = naive_warp_initialization.generateResult();
+		const auto balanced_res   = balanced_initialization.generateResult();
+		const auto balanced_warp_res = balanced_warp_initialization.generateResult();
+
+		std::cout << "Naive         Timing: " << naive_res.mean_   << " ms | Median: " << naive_res.median_   << std::endl;
+		std::cout << "Naive Warp    Timing: " << naive_warp_res.mean_   << " ms | Median: " << naive_warp_res.median_   << std::endl;
+		std::cout << "Balanced      Timing: " << balanced_res.mean_ << " ms | Median: " << balanced_res.median_ << std::endl;
+		std::cout << "Balanced Warp Timing: " << balanced_warp_res.mean_ << " ms | Median: " << balanced_warp_res.median_ << std::endl;
+		
+		printf("%s", break_line_green);
 	}
 
-	if (variant == STCVariant::WARPSIZEDBALANCED)
-	{
-		grid_size = divup(warp_count, block_size / WARP_SIZE);
-		d_STCBalanced_w<VertexDataType, EdgeDataType> << <grid_size, block_size >> > (
-			reinterpret_cast<DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>*>(dyn_graph.d_graph),
-			d_triangles.get(),
-			d_vertex_index.get(),
-			d_page_per_vertex_index.get(),
-			warp_count);
-	}
-	else
-	{
-		grid_size = divup(warp_count, block_size);
-		d_STCBalanced<VertexDataType, EdgeDataType> << <grid_size, block_size >> > (
-			reinterpret_cast<DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>*>(dyn_graph.d_graph),
-			d_triangles.get(),
-			d_vertex_index.get(),
-			d_page_per_vertex_index.get(),
-			warp_count);
-	}
+	if(printDebug)
+		printf("%s%s%s%s%sDONE\n%s%s%s%s%s", break_line_green_s, break_line, break_line, break_line, break_line, break_line, break_line, break_line, break_line, break_line_green_e);
 
-	
-	float measurement = end_clock(ce_start, ce_stop);
-	if(showPerformanceOutputPerRound)
-		printf("Timing: %f ms\n", measurement);
-	performance.measurements_.push_back(measurement);
-
-	if (global_TC_count)
-	{
-		// Prefix scan on d_triangles to get number of triangles
-		thrust::device_ptr<uint32_t> th_triangles(d_triangles.get());
-		thrust::device_ptr<uint32_t> th_triangle_count(d_triangle_count.get());
-		thrust::inclusive_scan(th_triangles, th_triangles + dyn_graph.number_vertices, th_triangle_count);
-
-		// Copy result back to host
-		d_triangles.copyFromDevice(triangles.get(), dyn_graph.number_vertices);
-		d_triangle_count.copyFromDevice(&triangle_count, 1, (dyn_graph.number_vertices - 1));
-
-		// // Report back number of triangles
-		//std::cout << "Triangle count is " << triangle_count << std::endl;
-
-		return triangle_count;
-	}
 	return 0;
 }
 
+uint32_t host_StaticTriangleCounting(CSR<DataType>& input_graph)
+{
+	uint32_t triangle_count = 0;
 
-// Instantiations
-template uint32_t STC<VertexData, EdgeData, OuroCQ>::algSTCNaive(const DynGraph<VertexData, EdgeData, OuroCQ>&, PerfMeasure&);
-template uint32_t STC<VertexData, EdgeData, OuroPQ>::algSTCNaive(const DynGraph<VertexData, EdgeData, OuroPQ>&, PerfMeasure&);
-template uint32_t STC<VertexData, EdgeData, OuroCQ>::algSTCBalanced(const DynGraph<VertexData, EdgeData, OuroCQ>&, PerfMeasure&);
-template uint32_t STC<VertexData, EdgeData, OuroPQ>::algSTCBalanced(const DynGraph<VertexData, EdgeData, OuroPQ>&, PerfMeasure&);
+	auto &adjacency = input_graph.col_ids;
+	auto &offset = input_graph.row_offsets;
+	auto number_vertices = input_graph.rows;
+	std::vector<uint32_t> triangle_count_per_vertex(number_vertices);
+	std::fill(triangle_count_per_vertex.begin(), triangle_count_per_vertex.end(), 0);
+
+	//------------------------------------------------------------------------------
+	// Largest index METHOD
+	//------------------------------------------------------------------------------
+	for(int i = 0; i < number_vertices; ++i)
+	{
+		printProgressBar(static_cast<double>(i) / number_vertices);
+		auto begin_iter = adjacency.get() + offset[i];
+		auto end_iter = adjacency.get() + offset[i + 1];
+		while(begin_iter != end_iter)
+		{
+			// Go over adjacency
+			// Get value of first element
+			auto first_value = *begin_iter;
+			if(first_value > i)
+			{
+				++begin_iter;
+				continue;
+			}
+			// Setup iterator on next element
+			auto adjacency_iter = ++begin_iter;
+			while(adjacency_iter != end_iter)
+			{
+				auto second_value = *adjacency_iter;
+				if(second_value > i)
+				{
+					++adjacency_iter;
+					continue;
+				}
+				// Go over adjacency and for each element search for the back edge
+				auto begin_adjacency_iter = adjacency.get() + offset[*adjacency_iter];
+				auto end_adjacency_iter = adjacency.get() + offset[*adjacency_iter + 1];
+				while(begin_adjacency_iter != end_adjacency_iter)
+				{
+					// Search for the back edge
+					if(*begin_adjacency_iter == first_value)
+					{
+						triangle_count += 3;
+						triangle_count_per_vertex[i] += 1;
+						triangle_count_per_vertex[first_value] += 1;
+						triangle_count_per_vertex[second_value] += 1;
+						break;
+					}
+					++begin_adjacency_iter;
+				}
+				++adjacency_iter;
+			}
+		}
+	}
+	printProgressBarEnd();
+
+	return triangle_count;
+}
+

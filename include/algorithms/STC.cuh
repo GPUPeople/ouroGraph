@@ -1,10 +1,9 @@
 #pragma once
 
 #include "Utility.h"
-#include "PerformanceMeasure.cuh"
 #include "device/CudaUniquePtr.cuh"
 #include "MemoryLayout.h"
-#include "device/dynGraph.cuh"
+#include "device/ouroGraph.cuh"
 
 enum class STCVariant
 {
@@ -15,25 +14,25 @@ enum class STCVariant
 };
 
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-struct DynGraph;
+struct ouroGraph;
 
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
 class STC
 {
 	public:
-		STC(const DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dyn_graph) :
-		triangles{std::make_unique<uint32_t[]>(dyn_graph.number_vertices)}
+		STC(const ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>& graph) :
+		triangles{std::make_unique<uint32_t[]>(graph.number_vertices)}
 	{
-		d_triangles.allocate(dyn_graph.number_vertices);
-		d_triangle_count.allocate(dyn_graph.number_vertices);
-		d_page_count.allocate(dyn_graph.number_vertices + 1);
+		d_triangles.allocate(graph.number_vertices);
+		d_triangle_count.allocate(graph.number_vertices);
+		d_page_count.allocate(graph.number_vertices + 1);
 	}
 
 
 	//! Performs STC computation on aimGraph, naive implementation
-	uint32_t algSTCNaive(const DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dyn_graph, PerfMeasure& performance);
+	uint32_t algSTCNaive(const ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>& graph, bool return_global_TC = true);
 	//! Performs STC computation on aimGraph, page-balanced implementation
-	uint32_t algSTCBalanced(const DynGraph<VertexDataType, EdgeDataType, MemoryManagerType>& dyn_graph, PerfMeasure& performance);
+	uint32_t algSTCBalanced(const ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>& graph, bool return_global_TC = true);
 
 	// Members on device
 	CudaUniquePtr<uint32_t> d_triangles;
@@ -45,7 +44,5 @@ class STC
 	//Member on host
 	STCVariant variant{ STCVariant::NAIVE };
 	std::unique_ptr<uint32_t[]> triangles;
-	bool global_TC_count{ true };
-	cudaEvent_t ce_start, ce_stop;
 	unsigned int warp_count{0};
 };

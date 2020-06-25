@@ -22,17 +22,7 @@
 using json = nlohmann::json;
 using DataType = float;
 using MemoryManagerType = OuroPQ;
-const std::string MemoryManagerName("Ouroboros - Virtualized Array-Hierarchy - Pages");
-
-
-void printMemoryManagerType()
-{
-	#ifdef TEST_CHUNKS
-	printf("%s --- Memory Manager Chunks --- \n%s", break_line_blue_s, break_line_blue_e);
-	#else
-	printf("%s --- Memory Manager Pages --- \n%s", break_line_blue_s, break_line_blue_e);
-	#endif
-}
+const std::string MemoryManagerName("Ouroboros - Standard - Pages");
 
 int main(int argc, char* argv[])
 {

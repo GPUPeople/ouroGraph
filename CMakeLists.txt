@@ -115,3 +115,13 @@ add_executable(pagerank
 	${OUROGRAPHHEADERS}
 )
 target_link_libraries(pagerank helper)
+
+##########################################################################
+# STC
+##########################################################################
+
+add_executable(stc
+	src/algorithms/STC.cu
+	${OUROGRAPHHEADERS}
+)
+target_link_libraries(stc helper)
