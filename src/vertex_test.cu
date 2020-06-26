@@ -140,6 +140,7 @@ int main(int argc, char* argv[])
 		const auto duplicate_checking{ config.find("duplicate_checking").value().get<bool>() };
 		const auto sorting{ config.find("sorting").value().get<bool>() };
 		const auto range{config.find("range").value().get<unsigned int>()};
+		const auto directionality{config.find("directionality").value().get<int>()};
 		unsigned int offset{0};
 		PerfMeasure timing_initialization;
 		PerfMeasure timing_insertion;
@@ -153,6 +154,7 @@ int main(int argc, char* argv[])
 			
 			// Instantiate graph framework
 			ouroGraph<VertexData, EdgeData, MemoryManagerType> graph;
+			graph.directionality = static_cast<GraphDirectionality>(directionality);
 			Verification<DataType> verification(csr_graph);
 			// Setup initial Vertex Mapper
 			VertexMapper<index_t, index_t> mapper;
@@ -179,22 +181,29 @@ int main(int argc, char* argv[])
 			for (auto update_round = 0; update_round < update_iterations; ++update_round, offset += range)
 			{
 				std::cout << "Update-Round " << update_round + 1 << std::endl;
-				insertion_updates.generateVertexInsertionUpdates(batch_size, round * update_iterations + update_round);
+				insertion_updates.generateVertexUpdates(batch_size, round * update_iterations + update_round);
 
 				// #################################
 				// Insertion
 				// #################################
 				timing_insertion.startMeasurement();
-				graph.vertexInsertion(insertion_updates, mapper, duplicate_checking, sorting);
+				graph.vertexInsertion(insertion_updates, mapper, sorting, duplicate_checking);
 				timing_insertion.stopMeasurement();
 
+				// Integrate changes into mapper
+				mapper.integrateInsertionChanges(insertion_updates);
 
+
+				deletion_updates.generateVertexUpdates(batch_size, round * update_iterations + update_round, graph.next_free_vertex);
 				// #################################
 				// Deletion
 				// #################################
 				timing_deletion.startMeasurement();
-				graph.vertexDeletion(deletion_updates);
+				graph.vertexDeletion(deletion_updates, mapper, sorting);
 				timing_deletion.stopMeasurement();
+
+				// Integrate changes into mapper
+				mapper.integrateDeletionChanges(deletion_updates);
 
 			}
 		}

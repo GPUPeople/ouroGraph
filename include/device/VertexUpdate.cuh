@@ -8,8 +8,20 @@ struct VertexUpdateBatch
 {
 	using VertexType = typename TypeResolution<VertexDataType, EdgeDataType>::VertexUpdateType;
 
-	void generateVertexInsertionUpdates(unsigned int batch_size, unsigned int seed);
-	void generateVertexDeletionUpdates(const VertexMapper<index_t, index_t>& mapper, unsigned int batch_size, unsigned int seed, unsigned int highest_index);
+	void generateVertexUpdates(unsigned int batch_size, unsigned int seed, unsigned int highest_vertex_index=0xFFFFFFFFU)
+	{
+		// Generate random edge updates
+		srand(seed + 1);
+
+		for (vertex_t i = 0; i < batch_size; ++i)
+		{
+			VertexType update;
+			update.identifier = rand();
+			vertex_data.push_back(update);
+		}
+		d_vertex_data.copyToDevice(vertex_data.data(), batch_size);
+		return;
+	}
 
 	std::vector<VertexType> vertex_data;		// Host Data
 	CudaUniquePtr<VertexType> d_vertex_data;	// Device data

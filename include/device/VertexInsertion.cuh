@@ -129,6 +129,8 @@ __global__ void d_duplicateInBatchChecking(VertexUpdateType* vertex_update_data,
 	return;
 }
 
+// ##############################################################################################################################################
+//
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
 __global__ void d_duplicateInGraphChecking(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
 											typename TypeResolution<VertexDataType, EdgeDataType>::VertexUpdateType* __restrict vertex_update_data,
@@ -180,15 +182,15 @@ __global__ void d_duplicateInGraphChecking(ouroGraph<VertexDataType, EdgeDataTyp
 	return;
 }
 
-  //------------------------------------------------------------------------------
-  //
-  template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-  __global__ void d_vertexInsertion(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
-  									const typename TypeResolution<VertexDataType, EdgeDataType>::VertexUpdateType* __restrict vertex_update_data,
-									int batch_size,
-									index_t* __restrict device_mapping,
-									index_t* __restrict device_mapping_update)
-  {
+// ##############################################################################################################################################
+//
+template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
+__global__ void d_vertexInsertion(ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>* graph,
+								const typename TypeResolution<VertexDataType, EdgeDataType>::VertexUpdateType* __restrict vertex_update_data,
+								int batch_size,
+								index_t* __restrict device_mapping,
+								index_t* __restrict device_mapping_update)
+{
 	using VertexUpdateType = typename TypeResolution<VertexDataType, EdgeDataType>::VertexUpdateType;
 	int tid = threadIdx.x + blockIdx.x*blockDim.x;
 	if (tid >= batch_size)
@@ -228,7 +230,7 @@ __global__ void d_duplicateInGraphChecking(ouroGraph<VertexDataType, EdgeDataTyp
 //
 template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
 void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::vertexInsertion(VertexUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>& update_batch,
-	VertexMapper<index_t, index_t>& mapper, bool duplicate_checking, bool sorting)
+	VertexMapper<index_t, index_t>& mapper, bool sorting, bool duplicate_checking)
 {
 	int batch_size = update_batch.vertex_data.size();
 	int block_size = 256;
@@ -290,22 +292,4 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::vertexInsertion
 	mapper.d_device_mapping_update.copyFromDevice(mapper.h_device_mapping_update.data(), batch_size);
 	if(sorting)
 		update_batch.d_vertex_data.copyFromDevice(update_batch.vertex_data.data(), batch_size);
-}
-
-// ##############################################################################################################################################
-//
-template <typename VertexDataType, typename EdgeDataType, typename MemoryManagerType>
-void VertexUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>::generateVertexInsertionUpdates(vertex_t batch_size, unsigned int seed)
-{
-	// Generate random edge updates
-	srand(seed + 1);
-
-	for (vertex_t i = 0; i < batch_size; ++i)
-	{
-		VertexType update;
-		update.identifier = rand();
-		vertex_data.push_back(update);
-	}
-	d_vertex_data.copyToDevice(vertex_data.data(), batch_size);
-	return;
 }

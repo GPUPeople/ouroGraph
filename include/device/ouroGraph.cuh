@@ -16,6 +16,12 @@ struct VertexMapper;
 
 struct PerfMeasure;
 
+enum class GraphDirectionality : int
+{
+	DIRECTED,
+	UNDIRECTED
+};
+
 template <typename VertexDataType, typename EdgeDataType, class MemoryManagerType>
 struct ouroGraph
 {
@@ -24,6 +30,7 @@ struct ouroGraph
 		__device__ __forceinline__ VertexDataType getAt(const int index) { return d_vertices[-index]; }
 		__device__ __forceinline__ unsigned int getNeighboursAt(const int index) { return d_vertices[-index].meta_data.neighbours; }
 		__device__ __forceinline__ unsigned int getIdentifierAt(const int index) { return d_vertices[-index].meta_data.host_identifier; }
+		__device__ __forceinline__ EdgeDataType* getAdjacencyAt(const int index) { return d_vertices[-index].adjacency; }
 		__device__ __forceinline__ VertexDataType* getPtrAt(const int index) { return &d_vertices[-index]; }
 		__device__ __forceinline__ void setAt(const int index, const VertexDataType& vertex) { d_vertices[-index] = vertex; }
 		__device__ __forceinline__ void setAdjacencyAt(const int index, EdgeDataType* adjacency) { d_vertices[-index].adjacency = adjacency; }
@@ -44,8 +51,8 @@ struct ouroGraph
 	void edgeDeletion(EdgeUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>& update_batch);
 
 	// Vertex Updates
-	void vertexInsertion(VertexUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>& update_batch, VertexMapper<index_t, index_t>& mapper, bool duplicate_checking, bool sorting);
-	void vertexDeletion(VertexUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>& update_batch);
+	void vertexInsertion(VertexUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>& update_batch, VertexMapper<index_t, index_t>& mapper, bool sorting, bool duplicate_checking);
+	void vertexDeletion(VertexUpdateBatch<VertexDataType, EdgeDataType, MemoryManagerType>& update_batch, VertexMapper<index_t, index_t>& mapper, bool sorting);
 
 	// Adjacency Modifications
 	__device__ __forceinline__ EdgeDataType* allocAdjacency(unsigned int size) { return reinterpret_cast<EdgeDataType*>(d_memory_manager->malloc(size * sizeof(EdgeDataType))); }
@@ -59,6 +66,7 @@ struct ouroGraph
 	size_t vertices_size{ 0ULL };
 	size_t vertexqueue_size{ 0ULL };
 	size_t ourograph_size { 0ULL };
+	GraphDirectionality directionality{GraphDirectionality::UNDIRECTED};
 
 	// Vertex information
 	IndexQueue d_vertex_queue;
