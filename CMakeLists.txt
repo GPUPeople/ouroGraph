@@ -59,6 +59,12 @@ add_executable(main_p
 )
 target_compile_definitions(main_p PUBLIC TEST_PAGES)
 target_link_libraries(main_p helper)
+add_executable(vertex_p
+	src/vertex_test.cu
+	${OUROGRAPHHEADERS}
+)
+target_compile_definitions(vertex_p PUBLIC TEST_PAGES)
+target_link_libraries(vertex_p helper)
 endif()
 
 if(TEST_C)
@@ -68,6 +74,12 @@ add_executable(main_c
 )
 target_compile_definitions(main_c PUBLIC TEST_CHUNKS)
 target_link_libraries(main_c helper)
+add_executable(vertex_c
+	src/vertex_test.cu
+	${OUROGRAPHHEADERS}
+)
+target_compile_definitions(vertex_c PUBLIC TEST_CHUNKS)
+target_link_libraries(vertex_c helper)
 endif()
 
 if(TEST_VAP)
@@ -77,6 +89,12 @@ add_executable(va_main_p
 )
 target_compile_definitions(va_main_p PUBLIC TEST_PAGES TEST_VIRTUALARRAY)
 target_link_libraries(va_main_p helper)
+add_executable(va_vertex_p
+	src/vertex_test.cu
+	${OUROGRAPHHEADERS}
+)
+target_compile_definitions(va_vertex_p PUBLIC TEST_PAGES TEST_VIRTUALARRAY)
+target_link_libraries(va_vertex_p helper)
 endif()
 
 if(TEST_VAC)
@@ -86,6 +104,12 @@ add_executable(va_main_c
 )
 target_compile_definitions(va_main_c PUBLIC TEST_CHUNKS TEST_VIRTUALARRAY)
 target_link_libraries(va_main_c helper)
+add_executable(va_vertex_c
+	src/vertex_test.cu
+	${OUROGRAPHHEADERS}
+)
+target_compile_definitions(va_vertex_c PUBLIC TEST_CHUNKS TEST_VIRTUALARRAY)
+target_link_libraries(va_vertex_c helper)
 endif()
 
 if(TEST_VLP)
@@ -95,6 +119,12 @@ add_executable(vl_main_p
 )
 target_compile_definitions(vl_main_p PUBLIC TEST_PAGES TEST_VIRTUALLIST)
 target_link_libraries(vl_main_p helper)
+add_executable(vl_vertex_p
+	src/vertex_test.cu
+	${OUROGRAPHHEADERS}
+)
+target_compile_definitions(vl_vertex_p PUBLIC TEST_PAGES TEST_VIRTUALLIST)
+target_link_libraries(vl_vertex_p helper)
 endif()
 
 if(TEST_VLC)
@@ -104,6 +134,12 @@ add_executable(vl_main_c
 )
 target_compile_definitions(vl_main_c PUBLIC TEST_CHUNKS TEST_VIRTUALLIST)
 target_link_libraries(vl_main_c helper)
+add_executable(vl_vertex_c
+	src/vertex_test.cu
+	${OUROGRAPHHEADERS}
+)
+target_compile_definitions(vl_vertex_c PUBLIC TEST_CHUNKS TEST_VIRTUALLIST)
+target_link_libraries(vl_vertex_c helper)
 endif()
 
 ##########################################################################

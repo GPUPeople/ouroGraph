@@ -156,17 +156,17 @@ struct EdgeDataWeightUpdateDevice
 
 struct alignas(16) VertexMetaData
 {
-	unsigned int locking;
-	unsigned int neighbours;
-	unsigned int host_identifier;
+	unsigned int locking{0U};
+	unsigned int neighbours{0U};
+	unsigned int host_identifier{0U};
 };
 
 struct alignas(16) VertexMetaDataWeight : uint4
 {
-	unsigned int locking;
-	unsigned int neighbours;
-	unsigned int host_identifier;
-	unsigned int weight;
+	unsigned int locking{0U};
+	unsigned int neighbours{0U};
+	unsigned int host_identifier{0U};
+	unsigned int weight{0U};
 };
 
 typedef struct VertexData

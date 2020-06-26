@@ -206,6 +206,7 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::initialize(cons
 
 	// Graph properties
 	number_vertices = input_graph.rows;
+	next_free_vertex = number_vertices;
 	number_edges = input_graph.nnz;
 
 	// Update graph on device
