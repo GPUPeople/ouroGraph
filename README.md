@@ -1,5 +1,6 @@
 # ouroGraph
 This respository holds the source code for ouroGraph.
+Its base, Ouroboros, can be found [here](https://github.com/GPUPeople/Ouroboros)
 
 # Setup
 To setup this repository, go ahead and perform the following steps:
