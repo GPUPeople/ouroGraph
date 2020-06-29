@@ -135,13 +135,10 @@ int main(int argc, char* argv[])
 		const auto iterations{config.find("iterations").value().get<int>()};
 		const auto update_iterations{config.find("update_iterations").value().get<int>()};
 		const auto batch_size{config.find("batch_size").value().get<int>()};
-		const auto realistic_deletion{config.find("realistic_deletion").value().get<bool>()};
 		const auto verify_enabled{ config.find("verify").value().get<bool>() };
 		const auto duplicate_checking{ config.find("duplicate_checking").value().get<bool>() };
 		const auto sorting{ config.find("sorting").value().get<bool>() };
-		const auto range{config.find("range").value().get<unsigned int>()};
 		const auto directionality{config.find("directionality").value().get<int>()};
-		unsigned int offset{0};
 		PerfMeasure timing_initialization;
 		PerfMeasure timing_insertion;
 		PerfMeasure timing_deletion;
@@ -178,7 +175,7 @@ int main(int argc, char* argv[])
 				verification.verify(csr_output, "Initialization", OutputCodes::VERIFY_INITIALIZATION);
 			}
 
-			for (auto update_round = 0; update_round < update_iterations; ++update_round, offset += range)
+			for (auto update_round = 0; update_round < update_iterations; ++update_round)
 			{
 				std::cout << "Update-Round " << update_round + 1 << std::endl;
 				insertion_updates.generateVertexUpdates(batch_size, round * update_iterations + update_round);
@@ -192,7 +189,6 @@ int main(int argc, char* argv[])
 
 				// Integrate changes into mapper
 				mapper.integrateInsertionChanges(insertion_updates);
-
 
 				deletion_updates.generateVertexUpdates(batch_size, round * update_iterations + update_round, graph.next_free_vertex);
 				// #################################

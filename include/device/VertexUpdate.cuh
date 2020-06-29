@@ -19,7 +19,8 @@ struct VertexUpdateBatch
 			update.identifier = rand();
 			vertex_data.push_back(update);
 		}
-		d_vertex_data.copyToDevice(vertex_data.data(), batch_size);
+		d_vertex_data.allocate(vertex_data.size());
+		d_vertex_data.copyToDevice(vertex_data.data(), vertex_data.size());
 		return;
 	}
 

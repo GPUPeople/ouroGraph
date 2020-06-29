@@ -55,6 +55,7 @@ __global__ void d_edgeDeletionVertexCentric(ouroGraph<VertexDataType, EdgeDataTy
 		return;
 
 	VertexDataType vertex = graph->vertices.getAt(tid);
+	auto old_adjacency{vertex.adjacency};
 	EdgeDataType* end_iterator{vertex.adjacency + (vertex.meta_data.neighbours)}; // Point to one behind end
 	const auto index_offset = update_src_offsets[(graph->number_vertices + 1) + tid];
 	auto actual_updates{ 0U };
@@ -99,11 +100,11 @@ __global__ void d_edgeDeletionVertexCentric(ouroGraph<VertexDataType, EdgeDataTy
 		auto iterations = Ouro::divup(vertex.meta_data.neighbours * sizeof(EdgeDataType), sizeof(uint4));
 		for (auto i = 0U; i < iterations; ++i)
 		{
-			reinterpret_cast<uint4*>(adjacency)[i] = reinterpret_cast<uint4*>(vertex.adjacency)[i];
+			reinterpret_cast<uint4*>(adjacency)[i] = reinterpret_cast<uint4*>(old_adjacency)[i];
 		}
 
 		// Free old page and set new pointer and index
-		graph->freeAdjacency(vertex.adjacency);
+		graph->freeAdjacency(old_adjacency);
 		graph->vertices.setAdjacencyAt(tid, adjacency);
 	}
 
@@ -141,6 +142,8 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::edgeDeletion(Ed
 		update_batch.d_edge_update.get(),
 		batch_size,
 		pre_processing.d_update_src_helper.get());
+
+	HANDLE_ERROR(cudaDeviceSynchronize());
 
 	DEBUG_checkKernelError("After Edge Deletion");
 }

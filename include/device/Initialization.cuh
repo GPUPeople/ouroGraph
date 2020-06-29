@@ -104,6 +104,7 @@ __global__ void d_chunk_initialize_w(ouroGraph<VertexDataType, EdgeDataType, Mem
 			auto pages_per_chunk = QI::getPagesPerChunkFromQueueIndex(queue_index);
 			uint32_t chunk_index = helper[NUM_QUEUES + queue_index] + (index / pages_per_chunk) + MemoryManagerType::totalNumberVirtualQueues(); // Add chunks already allocated
 			uint32_t page_index = index % pages_per_chunk;
+			graph->d_memory_manager->memory.chunk_locator.initChunkIndex(chunk_index);
 
 			if(page_index == 0)
 			{
@@ -330,6 +331,8 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::ouroGraphToCSR(
 
 	// Write Adjacency back
 	d_ouroGraphToCSR<VertexDataType, EdgeDataType, MemoryManagerType> << <grid_size, block_size >> > (d_graph, d_output_graph.row_offsets, d_output_graph.col_ids);
+
+	HANDLE_ERROR(cudaDeviceSynchronize());
 
 	convert(output_graph, d_output_graph);
 }

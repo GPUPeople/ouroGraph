@@ -1,8 +1,7 @@
 {
   "device": 0,
   "iterations": 1,
-  "pr_iterations": 10,
-  "write_csv": true,
+  "bfs_iterations": 5,
   "graphs":
     [
 		{"filename" : "../graphs/email"},

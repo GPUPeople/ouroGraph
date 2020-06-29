@@ -37,8 +37,10 @@ public:
 			h_device_mapping.push_back(i);
 			h_map_identifier_to_index.insert(std::pair<index_t, index_t>(i, i));
 		}
-
+		d_device_mapping.allocate(graph_manager.number_vertices);
+		d_device_mapping.copyToDevice(h_device_mapping.data(), graph_manager.number_vertices);
 		h_device_mapping_update.resize(batch_size);
+		d_device_mapping_update.allocate(batch_size);
 		return;
 	}
 

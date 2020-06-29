@@ -189,7 +189,6 @@ int main(int argc, char* argv[])
 					verification.verify(csr_output, "Insertion", OutputCodes::VERIFY_INSERTION);
 				}
 
-				
 				if (realistic_deletion)
 				{
 					deletion_updates.generateEdgeUpdates(graph, batch_size, (round * update_iterations) + update_round, range, offset);

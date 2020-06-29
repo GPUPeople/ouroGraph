@@ -46,33 +46,23 @@ __global__ void d_edgeInsertionVertexCentric(ouroGraph<VertexDataType, EdgeDataT
 			reinterpret_cast<uint4*>(adjacency)[i] = reinterpret_cast<uint4*>(vertex.adjacency)[i];
 		}
 
-		// Do insertion now
-		for (auto i = 0U, j = vertex.meta_data.neighbours; i < range_updates; ++i)
-		{
-			if (edge_update_data[index_offset + i].update.destination != DeletionMarker<index_t>::val)
-			{
-				adjacency[j++].destination = edge_update_data[index_offset + i].update.destination;
-			}
-		}
-
 		// Free old page and set new pointer and index
 		graph->freeAdjacency(vertex.adjacency);
 		graph->vertices.setAdjacencyAt(tid, adjacency);
+		vertex.adjacency = adjacency;
 	}
-	else
+
+	// Do insertion now
+	for (auto i = 0U, j = vertex.meta_data.neighbours; i < range_updates; ++i)
 	{
-		// Do insertion now
-		for (auto i = 0U, j = vertex.meta_data.neighbours; i < range_updates; ++i)
+		if (edge_update_data[index_offset + i].update.destination != DeletionMarker<index_t>::val)
 		{
-			if (edge_update_data[index_offset + i].update.destination != DeletionMarker<index_t>::val)
-			{
-				vertex.adjacency[j++].destination = edge_update_data[index_offset + i].update.destination;
-			}
+			vertex.adjacency[j++].destination = edge_update_data[index_offset + i].update.destination;
 		}
 	}
 
 	// Update number of neighbours
-	graph->vertices.setNeighboursAt(tid, number_updates);
+	graph->vertices.setNeighboursAt(tid, vertex.meta_data.neighbours + number_updates);
 }
 
 // ##############################################################################################################################################
@@ -90,17 +80,12 @@ __global__ void d_duplicateCheckingInSortedBatch2Graph(ouroGraph<VertexDataType,
 	auto edge_update = edge_update_data[tid];
 	auto vertex = graph->vertices.getAt(edge_update.source);
 	auto adjacency = vertex.adjacency;
-	// if(reinterpret_cast<unsigned long long>(vertex.adjacency) == 0xffffffffffffffff)
-	// {
-	// 	printf("This should not happen!\n");
-	// 	__trap();
-	// }
+
 	for (auto i = 0; i < vertex.meta_data.neighbours; ++i)
 	{
 		if (adjacency[i].destination == edge_update.update.destination)
 		{
-			if(printDebugCUDA)
-				printf("Batch:Graph  ->  Duplicate found : %u | %u\n", edge_update.source, edge_update.update.destination);
+			// printf("Batch:Graph  ->  Duplicate found : %u | %u\n", edge_update.source, edge_update.update.destination);
 			
 			if(updateValues)
 			{
@@ -146,8 +131,7 @@ __global__ void d_duplicateCheckingInSortedBatch(ouroGraph<VertexDataType, EdgeD
 				edge_update_data[tid].update.destination = DeletionMarker<index_t>::val;
 				--edge_src_counter[edge_update.source];
 
-				if(printDebugCUDA)
-					printf("Batch:Batch  ->  Duplicate found : %u | %u\n", edge_update.source, edge_update.update.destination);
+				// printf("Batch:Batch  ->  Duplicate found : %u | %u\n", edge_update.source, edge_update.update.destination);
 				if(statistics_enabled)
 					atomicAdd(&graph->d_memory_manager->stats.duplicates_detected, 1);
 			}

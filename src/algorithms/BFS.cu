@@ -101,12 +101,12 @@ int main(int argc, char* argv[])
 		}
 		
 		const auto iterations{config.find("iterations").value().get<int>()};
-		const auto stc_iterations{config.find("stc_iterations").value().get<int>()};
+		const auto bfs_iterations{config.find("bfs_iterations").value().get<int>()};
 		PerfMeasure basic_initialization;
 		PerfMeasure dp_initialization;
 		PerfMeasure preproc_initialization;
 		PerfMeasure class_initialization;
-		bool print_depth{true};
+		bool print_depth{false};
 		unsigned int start_vertex{0U};
 		std::vector<vertex_t> bfs_basic, bfs_dynamic_parallelism, bfs_preprocessing, bfs_classification;
 		for(auto i = 0; i < iterations; ++i)
@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
 			graph.initialize(csr_graph);
 			
 			unsigned int iter{20};
-			for(auto j = 0U; j < stc_iterations; ++j)
+			for(auto j = 0U; j < bfs_iterations; ++j)
 			{
 				std::cout << "BFS-Round: " << j + 1 << std::endl;
 

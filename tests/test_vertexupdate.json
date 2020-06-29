@@ -1,0 +1,15 @@
+{
+    "device" : 0,
+    "iterations" : 1,
+    "update_iterations" : 1,
+    "batch_size" : 100,
+    "verify" : true,
+	"duplicate_checking" : true,
+	"sorting" : true,
+	"directionality" : 0,
+    "graphs":
+    [
+		{"filename" : "../graphs/email"},
+		{"filename" : "../graphs/luxembourg_osm"}
+    ]
+}

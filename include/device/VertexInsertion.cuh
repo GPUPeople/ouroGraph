@@ -92,16 +92,16 @@ template <typename VertexUpdateType>
 __global__ void d_duplicateInBatchCheckingSorted(VertexUpdateType* __restrict vertex_update_data, int batch_size)
 {
 	int tid = threadIdx.x + blockIdx.x*blockDim.x;
-	if (tid >= batch_size)
+	if (tid >= batch_size - 1)
 		return;
 
 	index_t host_identifier = vertex_update_data[tid].identifier;
 	if (host_identifier != DeletionMarker<index_t>::val)
 	{
-		while (host_identifier == vertex_update_data[tid + 1].identifier && tid < batch_size - 1)
+		while (tid < batch_size - 1 && host_identifier == vertex_update_data[tid + 1].identifier)
 		{
-		vertex_update_data[tid + 1].identifier = DeletionMarker<index_t>::val;
-		++tid;
+			vertex_update_data[tid + 1].identifier = DeletionMarker<index_t>::val;
+			++tid;
 		}
 	}
 
@@ -271,12 +271,15 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::vertexInsertion
 			// Check Duplicates within the batch
 			d_duplicateInBatchChecking <typename TypeResolution<VertexDataType, EdgeDataType>::VertexUpdateType> 
 				<< < grid_size, block_size >> > (update_batch.d_vertex_data.get(), batch_size);
-
+			
 			grid_size = Ouro::divup(next_free_vertex, block_size);
 			d_duplicateInGraphChecking<VertexDataType, EdgeDataType, MemoryManagerType> 
 			<< < grid_size, block_size >> > (d_graph, update_batch.d_vertex_data.get(), batch_size, true);
 		}
 	}
+
+	// Make the mapping larger, such that the maximum update range will fit
+	mapper.d_device_mapping.resize(next_free_vertex + batch_size);
 
 	grid_size = Ouro::divup(batch_size, block_size);
 	d_vertexInsertion<VertexDataType, EdgeDataType, MemoryManagerType> << < grid_size, block_size >> > (d_graph,
@@ -284,6 +287,7 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::vertexInsertion
 																										batch_size,
 																										mapper.d_device_mapping.get(),
 																										mapper.d_device_mapping_update.get());
+
 
 	// Copy back mapping and data
 	updateGraphHost(*this);

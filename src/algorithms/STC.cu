@@ -19,7 +19,7 @@
 // Json Reader
 #include "helper/json.h"
 
-static constexpr bool computeHostMode{false};
+static constexpr bool computeHostMode{true};
 using json = nlohmann::json;
 using DataType = float;
 using MemoryManagerType = OuroPQ;
@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
 			// Initialize
 			graph.initialize(csr_graph);
 			
-			unsigned int iter{20};
+			unsigned int iter{5};
 			for(auto j = 0U; j < stc_iterations; ++j)
 			{
 				std::cout << "STC-Round: " << j + 1 << std::endl;
@@ -133,8 +133,8 @@ int main(int argc, char* argv[])
 					tc_naive = stc.algSTCNaive(graph, print_global_stc);
 					naive_initialization.stopMeasurement();
 				}
-				if(print_global_stc)
-					std::cout << "Global Triangle Count | Naive: " << tc_naive << std::endl;
+				// if(print_global_stc)
+				// 	std::cout << "Global Triangle Count | Naive: " << tc_naive << std::endl;
 
 				stc.variant = STCVariant::WARPSIZED;
 				for (auto k = 0U; k < iter; ++k)
@@ -143,29 +143,30 @@ int main(int argc, char* argv[])
 					tc_naive_warp = stc.algSTCNaive(graph, print_global_stc);
 					naive_warp_initialization.stopMeasurement();
 				}
-				if(print_global_stc)
-					std::cout << "Global Triangle Count | Naive Warp: " << tc_naive_warp << std::endl;
+				// if(print_global_stc)
+				// 	std::cout << "Global Triangle Count | Naive Warp: " << tc_naive_warp << std::endl;
 
 				stc.variant = STCVariant::BALANCED;
 				for (auto k = 0U; k < iter; ++k)
 				{
 					balanced_initialization.startMeasurement();
 					tc_balanced = stc.algSTCBalanced(graph, print_global_stc);
-					balanced_initialization.startMeasurement();
+					balanced_initialization.stopMeasurement();
 				}
-				if(print_global_stc)
-					std::cout << "Global Triangle Count | Balanced: " << tc_balanced << std::endl;
+				// if(print_global_stc)
+				// 	std::cout << "Global Triangle Count | Balanced: " << tc_balanced << std::endl;
 
 				stc.variant = STCVariant::WARPSIZEDBALANCED;
 				for (auto k = 0U; k < iter; ++k)
 				{
 					balanced_warp_initialization.startMeasurement();
 					tc_balanced_warp = stc.algSTCBalanced(graph, print_global_stc);
-					balanced_warp_initialization.startMeasurement();
+					balanced_warp_initialization.stopMeasurement();
 				}
-				if(print_global_stc)
-					std::cout << "Global Triangle Count | Balanced Warp: " << tc_balanced_warp << std::endl;
+				// if(print_global_stc)
+				// 	std::cout << "Global Triangle Count | Balanced Warp: " << tc_balanced_warp << std::endl;
 			}
+			std::cout << "Testcase done!\n";
 		}
 
 		auto output_correct{true};
@@ -182,19 +183,20 @@ int main(int argc, char* argv[])
 		auto host_triangle_count{0U};
 		if(computeHostMode)
 		{
-			printf("Host Count\n");
+			std::cout << "Host Count\n";
 			host_triangle_count = host_StaticTriangleCounting(csr_graph);
 			if(host_triangle_count != tc_naive || !output_correct)
 			{
-				printf("Output does not seem to match!\n");
-				printf("Host: %u | Naive: %u \n", host_triangle_count, tc_naive);
+				std::cout << "Output does not seem to match!\n";
+				std::cout << "Host: " << host_triangle_count << " | Naive: " << tc_naive << " \n";
 				exit(-1);
 			}
 			else
-				printf("Triangle Count is: %u\n", host_triangle_count);
+				std::cout << "Triangle Count is: " << host_triangle_count << " and matches host computation\n";
 		}
 		else
-			printf("Triangle Count is: %u\n", tc_naive);
+			std::cout << "Triangle Count is: " << tc_naive << std::endl;
+
 
 		const auto naive_res   = naive_initialization.generateResult();
 		const auto naive_warp_res = naive_warp_initialization.generateResult();

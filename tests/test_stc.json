@@ -2,21 +2,9 @@
   "device": 0,
   "iterations": 1,
   "stc_iterations": 5,
-  "write_csv": true,
-  "graphs": [
-    { "filename": "../../../../graphs/luxembourg_osm.mtx" },
-    { "filename": "../../../../graphs/coAuthorsCiteseer.mtx" },
-    { "filename": "../../../../graphs/coAuthorsDBLP.mtx" },
-    { "filename": "../../../../graphs/ldoor.mtx" },
-    { "filename": "../../../../graphs/audikw_1.mtx" },
-    { "filename": "../../../../graphs/delaunay_n20.mtx" },
-    { "filename": "../../../../graphs/rgg_n_2_20_s0.mtx" },
-    { "filename": "../../../../graphs/hugetric-00000.mtx" },
-    { "filename": "../../../../graphs/delaunay_n23.mtx" },
-    { "filename": "../../../../graphs/germany_osm.mtx" },
-    { "filename": "../../../../graphs/nlpkkt120.mtx" },
-    { "filename": "../../../../graphs/nlpkkt200.mtx" },
-    { "filename": "../../../../graphs/nlpkkt240.mtx" },
-    { "filename": "../../../../graphs/europe_osm.mtx" }
-  ]
+  "graphs":
+    [
+		{"filename" : "../graphs/email"},
+		{"filename" : "../graphs/luxembourg_osm"}
+    ]
 }
