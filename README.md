@@ -2,6 +2,10 @@
 This respository holds the source code for ouroGraph.
 Its base, Ouroboros, can be found [here](https://github.com/GPUPeople/Ouroboros)
 
+**Note**
+It seems that on Arch Linux with GCC11 and CUDA 11, there is some issue (some internal allocator error is thrown).
+In that case please use GCC10 in the mean time (works with CUDA 11.3.109 on Arch)
+
 # Setup
 To setup this repository, go ahead and perform the following steps:
 * `git clone git@github.com:GPUPeople/ouroGraph.git <folder_to_clone_to>`
