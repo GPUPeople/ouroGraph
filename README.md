@@ -17,6 +17,10 @@ To setup this repository, go ahead and perform the following steps:
 * `make`
 * Enjoy!
 
+# Note
+Currently, `Ouroboros` itself receives `8GiB` of memory, this is slightly increased by the amount of storage needed for vertices and an additional re-use queue at the end.
+If you need to change this amount (either because your GPU has less memory or you need to manage bigger graphs), this is currently set as a `constexpr size_t` in the file [`include/device/ouroGraph.cuh`](https://github.com/GPUPeople/ouroGraph/blob/4c5074ca470557021864382e65ba0ea238a8a45b/include/device/ouroGraph.cuh#L28) and can be changed there.
+
 # Testcases
 `X` can be substitued by `<blank>`, `va` or `vl` and `Y` can be substituted by `p` or `c` to test all six variants of ouroGraph. The algorithms are currently just configured for standard page-based ouroGraph.
 | Testcase | Description | Call |
