@@ -6,6 +6,9 @@ option(CUDA_BUILD_CC61 "Build with compute capability 6.1 support" FALSE)
 option(CUDA_BUILD_CC70_SYNC "Build with compute capability 7.0 support - SYNC" FALSE)
 option(CUDA_BUILD_CC70_ASYNC "Build with compute capability 7.0 support - ASYNC" TRUE)
 option(CUDA_BUILD_CC75 "Build with compute capability 7.5 support" FALSE)
+option(CUDA_BUILD_CC80 "Build with compute capability 8.0 support" FALSE)
+option(CUDA_BUILD_CC86 "Build with compute capability 8.6 support" FALSE)
+option(CUDA_BUILD_CC87 "Build with compute capability 8.7 support" FALSE)
 option(CUDA_BUILD_INFO "Build with kernel statistics and line numbers" TRUE)
 option(CUDA_BUILD_DEBUG "Build with kernel debug" FALSE)
 
@@ -29,6 +32,18 @@ endif ()
 if (CUDA_BUILD_CC75)
 	string(APPEND CMAKE_CUDA_FLAGS " -gencode=arch=compute_75,code=sm_75")
 endif ()
+
+if(CUDA_BUILD_CC80)
+    string(APPEND CMAKE_CUDA_FLAGS " -gencode=arch=compute_80,code=sm_80")
+endif()
+
+if(CUDA_BUILD_CC86)
+    string(APPEND CMAKE_CUDA_FLAGS " -gencode=arch=compute_86,code=sm_86")
+endif()
+
+if(CUDA_BUILD_CC87)
+    string(APPEND CMAKE_CUDA_FLAGS " -gencode=arch=compute_87,code=sm_87")
+endif()
 
 if(WIN32)
 string(APPEND CMAKE_CUDA_FLAGS "  -Xcompiler -Wall -D_FORCE_INLINES -DVERBOSE --expt-extended-lambda -use_fast_math --expt-relaxed-constexpr")

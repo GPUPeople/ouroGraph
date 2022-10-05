@@ -201,7 +201,7 @@ void ouroGraph<VertexDataType, EdgeDataType, MemoryManagerType>::initialize(cons
 	vertexqueue_size = Ouro::alignment<uint64_t>((vertex_queue_size * sizeof(index_t)), MemoryManagerType::ChunkBase::size_); // VertexQueue
 
 	// Initialize memory manager
-	memory_manager->initialize(vertices_size + ourograph_size, vertexqueue_size);
+	memory_manager->initialize(ALLOCATION_SIZE, vertices_size + ourograph_size, vertexqueue_size);
 
 	setPointers();
 

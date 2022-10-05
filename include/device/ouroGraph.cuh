@@ -25,6 +25,7 @@ enum class GraphDirectionality : int
 template <typename VertexDataType, typename EdgeDataType, class MemoryManagerType>
 struct ouroGraph
 {
+	static constexpr size_t ALLOCATION_SIZE{8192ULL * 1024ULL * 1024ULL};
 	struct Vertices
 	{
 		__device__ __forceinline__ VertexDataType getAt(const int index) { return d_vertices[-index]; }
